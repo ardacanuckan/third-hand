@@ -8,7 +8,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE)); sys.path.insert(0, str(HERE.parent))
 import mujoco
 import servo_sim as S
-from character import GESTURES, JOINTS, PERSONALITIES, _settings, idle_plan, plan
+from character import ACC_CAP, BASE, GESTURES, JOINTS, MAX_DEV, PERSONALITIES, SIGN, SPEED_CAP, U, _settings, idle_plan, plan
 
 STAND = [0.0, 0.1, -1.4, 0.9, 0.0, 0.9, 0.0, 0.3]     # upright "desk lamp" pose, rad
 FPS = 30
@@ -64,12 +64,15 @@ def simulate(steps):
     return frames, torque, peak
 
 
-out = {"fps": FPS, "joints": S.JN, "stand": STAND, "characters": {}, "clips": {}}
+out = {"fps": FPS, "joints": S.JN, "stand": STAND, "characters": {}, "clips": {},
+       # everything the browser needs to plan new choreography the same way character.py does
+       "engine": dict(lo=lo, hi=hi, neutral=neutral, unit=U, max_dev=MAX_DEV, sign=SIGN, base=BASE,
+                      acc_cap=ACC_CAP, speed_cap=SPEED_CAP, gestures=GESTURES)}
 for name, p in PERSONALITIES.items():
     acc, speed = _settings(p, JOINTS)
     out["characters"][name] = dict(archetype=p.archetype, laban=p.laban, acc=acc, speed=speed,
                                    size=p.size, tempo=p.tempo, blend=p.blend, anticipation=p.anticipation,
-                                   overshoot=p.overshoot, tremor=p.tremor, smooth=p.smooth,
+                                   overshoot=p.overshoot, tremor=p.tremor, smooth=p.smooth, posture=p.posture, acc_mult=p.acc, speed_mult=p.speed,
                                    breath=p.breath, breath_s=p.breath_s, glance_s=p.glance_s)
     for g in list(GESTURES) + ["idle"]:
         steps = idle_plan(p, 8, neutral) if g == "idle" else plan(p, g, neutral)

@@ -69,6 +69,23 @@ tbody tr{cursor:pointer}
 tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .pill{display:inline-block;font:500 11.5px var(--mono);padding:2px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
 .pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+.direct{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px}
+.direct h2{font-size:19px}
+.direct form{display:flex;flex-direction:column;gap:8px;min-width:0}
+#prompt{font:15px/1.45 var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:9px 10px;resize:vertical;min-height:64px;width:100%}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ghost{font:500 13px var(--body);background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 12px;cursor:pointer}
+.ghost:disabled,.play:disabled{opacity:.5;cursor:default}
+.ex{font:400 12.5px var(--body);border:1px dashed var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:3px 10px;cursor:pointer}
+.ex:hover{color:var(--ink);border-color:var(--muted)}
+#status{font:500 12.5px var(--mono);color:var(--muted);min-height:1.2em}
+#status.err{color:var(--warn)}
+.choreo{display:flex;flex-direction:column;gap:6px;min-width:0}
+.choreo h3{font:700 15px var(--display);font-stretch:90%;margin:0}
+#steps{margin:0;padding-left:20px;font-size:13.5px;max-height:220px;overflow:auto}
+#steps li{margin:2px 0}
+#steps code{font:400 11.5px var(--mono);color:var(--muted)}
+@media (max-width:760px){.direct{grid-template-columns:1fr}}
 .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
 .notes p{margin:4px 0 0;color:var(--muted);font-size:14px;max-width:62ch}
 .notes h3{font:700 15px var(--display);font-stretch:90%;margin:0}
@@ -109,6 +126,25 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
     <div class="hint">Pick up to three characters. The oldest pick leaves when you add a fourth. Click a table row to put that character on stage.</div>
   </div>
 
+  <section class="direct" aria-label="Direct the characters with a prompt">
+    <form id="pform">
+      <h2>Direct them with a prompt</h2>
+      <label for="prompt" class="hint">Describe a moment. Claude writes one choreography; each character on stage performs it in its own style.</label>
+      <textarea id="prompt" rows="3" maxlength="400" placeholder="Hear a strange noise, look for it, then shrug it off"></textarea>
+      <div class="row">
+        <button class="play" id="go" type="submit">Perform</button>
+        <button class="ghost" id="stop" type="button" hidden>Stop</button>
+        <span id="status" role="status"></span>
+      </div>
+      <div class="row" id="examples"><span class="glabel">Try</span></div>
+    </form>
+    <div class="choreo">
+      <h3 id="ctitle">Choreography</h3>
+      <ol id="steps"><li class="hint" style="list-style:none;margin-left:-20px">Claude's keyframes appear here, with the joints they move.</li></ol>
+      <div class="row"><button class="ghost" id="copy" type="button" disabled>Copy as Python gesture</button><span class="hint" id="copied"></span></div>
+    </div>
+  </section>
+
   <section style="display:flex;flex-direction:column;gap:10px">
     <h2>Settings per character</h2>
     <div class="tablewrap"><table>
@@ -136,12 +172,14 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildRobot } from './core.js';
+import { perform, sanitize } from './engine.js';
 
 const $ = (s) => document.querySelector(s);
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const SLOT_VARS = ['--slot-a', '--slot-b', '--slot-c'];
 const GESTURE_ORDER = ['curious', 'yes', 'no', 'hello', 'look_around', 'startle', 'sigh', 'laugh', 'sulk', 'idle'];
-const label = (g) => g.replace('_', ' ');
+let promptKF = null, promptClips = {}, promptTitle = '';
+const label = (g) => g === 'prompt' ? 'your prompt' : g.replace('_', ' ');
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let data, gesture = 'curious', cast = ['trickster', 'smooth', 'grump'];
@@ -188,8 +226,13 @@ function resize() {
 new ResizeObserver(resize).observe(canvas);
 
 /* ---------- clips ---------- */
-const clip = (name) => data.clips[`${name}/${gesture}`];
-const duration = () => Math.max(...cast.map((n) => clip(n).q.length)) / data.fps;
+const clip = (name) => {
+  if (!name) return null;
+  if (gesture !== 'prompt') return data.clips[`${name}/${gesture}`];
+  if (!promptClips[name]) promptClips[name] = { q: perform(data, name, promptKF.map((k) => [k.beats, k.pose])), torque: null, peak: null };
+  return promptClips[name];
+};
+const duration = () => Math.max(...cast.filter(Boolean).map((n) => clip(n).q.length)) / data.fps;
 
 function pose(i, frame) {
   const q = frame;
@@ -219,18 +262,19 @@ function buildSlots() {
     const el = document.createElement('div'); el.className = 'slot';
     el.innerHTML = n ? `<div class="tag"><span class="dot" style="background:var(${SLOT_VARS[i]})"></span><span class="nm">${n}</span><span class="ar">${ch.archetype}</span></div>
       <div class="lab">${ch.laban}</div><canvas class="spark" data-i="${i}" aria-label="Shoulder load over the clip"></canvas>
-      <div class="pk">shoulder peak ${clip(n).peak}% of stall</div>`
+      <div class="pk">${clip(n).peak == null ? 'browser servo model · torque not computed' : `shoulder peak ${clip(n).peak}% of stall`}</div>`
       : `<div class="tag"><span class="dot" style="background:var(--line)"></span><span class="nm" style="color:var(--muted)">empty</span></div><div class="lab">pick a character below</div>`;
     box.append(el);
   }
 }
 function drawSparks(fi) {
   document.querySelectorAll('.spark').forEach((cv) => {
-    const i = +cv.dataset.i, c = clip(cast[i]); if (!c) return;
+    const i = +cv.dataset.i, c = clip(cast[i]); if (!c || !c.torque) { cv.hidden = true; return; }
+    cv.hidden = false;
     const w = cv.clientWidth, h = cv.clientHeight, r = Math.min(devicePixelRatio, 2);
     if (cv.width !== w * r) { cv.width = w * r; cv.height = h * r; }
     const g = cv.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, w, h);
-    const n = Math.max(...cast.filter(Boolean).map((x) => clip(x).torque.length));
+    const n = Math.max(...cast.filter(Boolean).map((x) => clip(x).torque?.length || 0));
     const X = (k) => (k / (n - 1)) * w, Y = (v) => h - 2 - (v / 100) * (h - 4);
     g.strokeStyle = css('--line'); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, Y(50)); g.lineTo(w, Y(50)); g.stroke(); g.setLineDash([]);
     const col = css(SLOT_VARS[i]);
@@ -260,6 +304,12 @@ function buildChips() {
     b.addEventListener('click', () => toggle(n));
     cs.append(b);
   }
+}
+function addPromptChip() {
+  if ($('#g-prompt')) return;
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.id = 'g-prompt'; b.textContent = label('prompt');
+  b.addEventListener('click', () => { gesture = 'prompt'; t = 0; update(); });
+  $('#gestures').append(b);
 }
 function toggle(n) {
   const i = cast.indexOf(n);
@@ -304,6 +354,98 @@ function buildTable() {
   }
 }
 
+/* ---------- prompt -> choreography (Claude) -> every character ---------- */
+const EXAMPLES = ['Hear a strange noise, look for it, then shrug it off', 'Win the lottery', 'Taste something sour',
+  'Fall asleep in a boring meeting', 'Greet an old friend across the room', 'Dance to a slow waltz'];
+const JOINT_GUIDE = `Joints, as offsets from the character's standing pose (units; 1 unit = 6 % of the joint's range):
+- j1 base turn (whole body looks left/right): +/- 2.5
+- j2 shoulder lean: + forward and down, - back. Keep within +/- 0.8 (it carries the arm)
+- j3 neck height: + droops low, - rises tall. +/- 2
+- j4 neck bend: + bends head down, - lifts. +/- 2
+- j5 body twist (roll): +/- 2
+- j6 head nod: + down, - up. +/- 2.5
+- j7 head tilt sideways (roll), the curious-dog tilt: +/- 2.5
+- j8 mouth (jaws): 0 = resting, + opens, up to 4`;
+function buildPrompt(req) {
+  const lib = Object.entries(data.engine.gestures).map(([g, k]) => `${g}: ${JSON.stringify(k)}`).join('\n');
+  return `You are the choreographer for a small 8-servo robot arm that acts like a character (think of an expressive desk lamp).
+Turn the request into keyframes. Each character on stage will perform your keyframes in its own style (it adds its own speed, wind-up, overshoot, tremor or smoothness), so write the plain movement and its timing, not a personality.
+
+${JOINT_GUIDE}
+
+Each keyframe: {"beats": number 0.3-4 (1 beat ~ half a second), "pose": {joint: offset, ...}, "note": "3-6 words"}.
+List only the joints that change in that keyframe; the others hold. Use 0 to return a joint to standing. The arm returns to standing automatically at the end.
+Use 4-14 keyframes. Tell the story with posture, gaze (j1 + j6 + j7), mouth and timing: holds (a keyframe with an empty pose) are powerful.
+
+Existing gestures in the same format, as [beats, pose] pairs, for scale:
+${lib}
+
+Request: "${req}"
+
+Reply with only JSON: {"title": "2-5 word title", "keyframes": [{"beats": 1, "pose": {"j6": -1}, "note": "looks up"}, ...]}`;
+}
+let sampleFn = null, ctl = null, blocked = false;
+const ERR = { not_granted: 'Claude is not allowed for this page. Allow it from the page’s Permissions menu to use prompts.',
+  sampling_disabled: 'Claude is not available for this account.', rate_limited: 'Too many requests just now. Try again in a minute.',
+  session_expired: 'Your session expired. Sign in again to use prompts.', invalid_json: 'Claude’s answer was not a usable choreography. Try again or rephrase.',
+  refused: 'Claude declined this prompt. Try a different moment to act out.', empty_completion: 'No choreography came back. Try a shorter prompt.' };
+function setStatus(msg, err = false) { const s = $('#status'); s.textContent = msg; s.classList.toggle('err', err); }
+function showChoreo() {
+  $('#ctitle').textContent = promptTitle || 'Choreography';
+  $('#steps').innerHTML = '';
+  for (const k of promptKF) {
+    const li = document.createElement('li');
+    const joints = Object.entries(k.pose).map(([j, v]) => `${j} ${v > 0 ? '+' : ''}${+v.toFixed(2)}`).join(', ') || 'hold';
+    li.textContent = (k.note || 'move') + ' ';
+    const c = document.createElement('code'); c.textContent = `${k.beats} beat${k.beats === 1 ? '' : 's'} · ${joints}`; li.append(c);
+    $('#steps').append(li);
+  }
+  $('#copy').disabled = false;
+}
+async function direct(req) {
+  if (!sampleFn) return;
+  ctl?.abort(); ctl = new AbortController();
+  $('#go').disabled = true; $('#stop').hidden = false; setStatus('Claude is choreographing…');
+  try {
+    const raw = await sampleFn.json(buildPrompt(req), { signal: ctl.signal });
+    const kf = sanitize(data.engine, raw);
+    if (kf.length < 2) throw { code: 'invalid_json' };
+    promptKF = kf; promptTitle = String(raw?.title || req).slice(0, 60); promptClips = {};
+    addPromptChip(); gesture = 'prompt'; t = 0; playing = true; $('#play').textContent = 'Pause';
+    showChoreo(); update();
+    setStatus(`${kf.length} keyframes · ${cast.filter(Boolean).length} characters performing`);
+  } catch (e) {
+    if (e?.code === 'cancelled') setStatus('Stopped.');
+    else setStatus(ERR[e?.code] || 'Something went wrong reaching Claude. Try again.', true);
+    if (e?.code === 'not_granted' || e?.code === 'sampling_disabled') blocked = true;
+  } finally {
+    $('#go').disabled = blocked;
+    $('#stop').hidden = true;
+  }
+}
+function setupPrompt() {
+  for (const ex of EXAMPLES) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'ex'; b.textContent = ex;
+    b.addEventListener('click', () => { $('#prompt').value = ex; direct(ex); });
+    $('#examples').append(b);
+  }
+  $('#pform').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#prompt').value.trim(); if (v) direct(v); else $('#prompt').focus(); });
+  $('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('#pform').requestSubmit(); });
+  $('#stop').addEventListener('click', () => ctl?.abort());
+  $('#copy').addEventListener('click', () => {
+    const name = (promptTitle || 'my_gesture').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'my_gesture';
+    const py = `    "${name}": [` + promptKF.map((k) => `(${k.beats}, {${Object.entries(k.pose).map(([j, v]) => `"${j}": ${+v.toFixed(2)}`).join(', ')}})`).join(', ') + '],';
+    const done = () => { $('#copied').textContent = 'Copied. Paste it into GESTURES in character.py.'; };
+    navigator.clipboard?.writeText(py).then(done, () => { $('#copied').textContent = py; });
+  });
+  $('#go').disabled = true; setStatus('Connecting to Claude…');
+  (window.claude ? window.claude.use('sample') : Promise.resolve(null)).then((fn) => {
+    sampleFn = fn;
+    if (!fn) { setStatus('Prompts need this page open in claude.ai, where it can ask Claude.', true); return; }
+    $('#go').disabled = false; setStatus('');
+  });
+}
+
 /* ---------- loop ---------- */
 let last = performance.now();
 function frame(now) {
@@ -316,7 +458,7 @@ function frame(now) {
 fetch('anim.json').then((r) => r.json()).then((d) => {
   data = d;
   $('#loading').hidden = true;
-  paintSlots(); buildChips(); buildTable(); update(); resize();
+  paintSlots(); buildChips(); buildTable(); update(); resize(); setupPrompt();
   $('#play').textContent = playing ? 'Pause' : 'Play';
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { paintSlots(); render(); });
   new MutationObserver(() => { paintSlots(); render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

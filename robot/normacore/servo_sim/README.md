@@ -55,3 +55,12 @@ characters side by side on the real ElRobot model (shoulder peak from standing â
 ```bash
 cd robot/normacore/servo_sim/viewer && python3 -m http.server 8090    # open http://localhost:8090
 ```
+
+### Prompts in the viewer
+
+Type a moment ("taste something sour") and Claude writes one choreography (keyframes in the
+`GESTURES` format); `viewer/engine.js` plans it the way `character.py` does for each character and
+plays it on a light servo model (the STS3215 speed/acc ramp plus a 10 ms lag). Checked against the
+physics clips with `node viewer/test_engine.mjs`: mean joint difference 0.36Â°. Prompt clips are not
+physics-checked for torque; "Copy as Python gesture" gives a `GESTURES` entry to run through
+`sim_character.py` before the real arm. Prompts work only inside claude.ai (the `sample` capability).
