@@ -1,0 +1,6 @@
+[project]
+name = "third-hand-arm-mcp"
+version = "0.1.0"
+description = "MCP server for the Third Hand ElRobot arm"
+requires-python = ">=3.10"
+dependencies = ["mcp>=1.2,<2", "pyarrow>=14"]

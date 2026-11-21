@@ -1,0 +1,15 @@
+{
+  "objects": {
+    "glue stick": {
+      "task": "give me the blue glue stick",
+      "aliases": ["glue", "gluestick", "blue stick", "blue glue stick"],
+      "width_mm": 18,
+      "episodes": 4
+    }
+  },
+  "jaws": {"open": 0.6, "closed": 0.03},
+  "cameras": {"side": 0, "wrist": 1},
+  "policy_hz": 2,
+  "max_delta_ticks": 150,
+  "note": "Add an object here only after a policy has been trained on it, with the exact task text used in training."
+}

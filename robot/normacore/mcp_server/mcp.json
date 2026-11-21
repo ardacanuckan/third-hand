@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "third-hand-arm": {
+      "command": "uv",
+      "args": ["run", "--project", "robot/normacore/mcp_server", "python", "robot/normacore/mcp_server/server.py"],
+      "env": {
+        "THIRD_HAND_FAKE": "0",
+        "VLA_CHECKPOINT": "",
+        "SMOLVLA_DIR": ""
+      }
+    }
+  }
+}

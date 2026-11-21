@@ -115,20 +115,77 @@ def _grip_events(frames: list[Frame], T: list[float], jaw: list[float] | None) -
                 i += 1
             b = min(i, n - 1)                                        # settled
             squeeze = max(frames[k].current.get("j8", 0) for k in range(a, min(n, b + 3)))
-            blocked = min((frames[k].goal.get("j8", jaw[k]) - frames[k].pos.get("j8", jaw[k])) for k in range(a, min(n, b + 3)))
+            # blocked = still commanded tighter AFTER the jaws stopped (while closing, the goal always leads)
+            blocked = min((frames[k].goal.get("j8", jaw[k]) - frames[k].pos.get("j8", jaw[k])) for k in range(b, min(n, b + 4)))
             stop = frames[b].pos.get("j8", jaw[b])
             closed_by = frames[a].pos.get("j8", jaw[a]) - stop
-            if stop > JAWS_CLOSED and closed_by >= GRIP_CLOSE and (squeeze >= GRIP_MA or blocked <= -GRIP_GAP):
+            evidence = squeeze >= GRIP_MA or blocked <= -GRIP_GAP
+            if closed_by >= GRIP_CLOSE and evidence:
                 if held_at is None:
                     why = f"{squeeze:.0f} mA" if squeeze >= GRIP_MA else "jaws blocked"
-                    out.append((T[b], f"grips something (jaws stopped {stop:.0%} open, {why})"))
+                    small = " (a thin part)" if stop <= JAWS_CLOSED + 0.04 else ""
+                    out.append((T[b], f"grips something{small} (jaws stopped {stop:.0%} open, {why})"))
                 held_at = stop
-            elif stop <= JAWS_CLOSED and held_at is not None:
+            elif closed_by >= GRIP_CLOSE and held_at is None and stop < 0.5:
+                out.append((T[b], "EMPTY_CLOSE"))            # ends well closed with no squeeze: nothing there
+            elif stop <= JAWS_CLOSED and held_at is not None and not evidence:
                 out.append((T[b], "closes the jaws fully: nothing in them any more")); held_at = None
             continue
         if held_at is not None and jaw[i] > held_at + RELEASE_OPEN:
             out.append((T[i], "lets go")); held_at = None
         i += 1
+    # an empty close followed by a grasp is a missed grasp; otherwise the jaws are just being closed
+    named = []
+    for k, (t, e) in enumerate(out):
+        if e == "EMPTY_CLOSE":
+            later_grip = any(x.startswith("grips") for _, x in out[k + 1:])
+            e = "closes the jaws on nothing: a missed grasp" if later_grip else "closes the jaws (nothing between them)"
+        named.append((t, e))
+    return named
+
+
+def _pull_before(frames: list[Frame], t_release: float) -> dict | None:
+    """Did someone pull on the held object just before the jaws opened? Runs handover.PullDetector over
+    the 2.5 s before the release (baseline from its first 0.5 s, while the arm holds still)."""
+    from handover import PullDetector
+    win = [f for f in frames if t_release - 2.5 <= f.t <= t_release - 0.05]
+    if len(win) < 8:
+        return None
+    # only meaningful while the arm is told to stay put: commanded positions steady over the window
+    if win[0].goal:
+        for j in ("j1", "j2", "j3", "j4", "j6"):
+            g = [f.goal.get(j) for f in win if j in f.goal]
+            if g and max(g) - min(g) > 0.012:
+                return None
+    det = PullDetector({"baseline_s": 0.5, "hold_s": 0.15})
+    for f in win:
+        ev = det.update(f.t, f.pos, f.current, f.ranges)
+        if ev:
+            return ev
+    return None
+
+
+def _fault_events(frames: list[Frame], T: list[float]) -> list[tuple[float, str]]:
+    """An arm joint that stays far from its goal for over 0.8 s WITHOUT closing the gap has stopped
+    following: an overload trip or torque off. A follower that merely trails the leader (~0.3 s on the
+    real arm) keeps catching up, so it is not reported."""
+    out = []
+    if not frames or not frames[0].goal:
+        return out
+    for j in JOINTS[:7]:
+        start = None
+        for f in frames:
+            off = abs(f.goal.get(j, f.pos.get(j, 0)) - f.pos.get(j, 0))
+            if off > 0.08:
+                if start is None:
+                    start, p0, off0 = f.t, f.pos.get(j, 0), off
+                elif f.t - start >= 0.8:
+                    toward = abs(f.goal.get(j, 0) - p0) - abs(f.goal.get(j, 0) - f.pos.get(j, 0))
+                    if toward < 0.3 * off0 and off >= 0.7 * off0:
+                        out.append((start, f"{j} stops following its commands (overload or torque off?)")); break
+                    start = None
+            else:
+                start = None
     return out
 
 
@@ -157,7 +214,13 @@ def describe(frames: list[Frame]) -> Description:
             merged[-1][1] = r[1]; merged[-1][2] = merged[-1][2] or r[2]
         else:
             merged.append(r)
-    events = _grip_events(frames, T, P.get("j8"))
+    events = sorted(_grip_events(frames, T, P.get("j8")) + _fault_events(frames, T))
+    for k, (t, e) in enumerate(events):
+        if e == "lets go":
+            pull = _pull_before(frames, t)
+            if pull:
+                events[k] = (t, f"lets go after a pull ({pull['joint']}: +{pull['current_ma']} mA, {pull['deflection_deg']} deg give, "
+                                f"{t - pull['pull_started']:.1f} s after the pull began)")
     segs = []
     for a, b, m in merged:
         ch = {j: P[j][b] - P[j][a] for j in joints}
@@ -175,7 +238,7 @@ def describe(frames: list[Frame]) -> Description:
     holds, start = [], None
     for t, e in events:
         if e.startswith("grips"): start = t
-        elif start is not None: holds.append((start, t)); start = None
+        elif start is not None and (e.startswith("lets go") or e.startswith("closes the jaws fully")): holds.append((start, t)); start = None
     if start is not None: holds.append((start, math.inf))
     grip_times = [h[0] for h in holds]
 
@@ -210,7 +273,8 @@ def describe(frames: list[Frame]) -> Description:
             summary_bits.append(s.phrase)
     total = T[-1] - T[0]
     still = sum(s.t1 - s.t0 for s in segs if not s.moving)
-    head = f"Over {total:.0f} s the arm moved in {sum(s.moving for s in segs)} stretches and held still for {still:.0f} s."
+    nm = sum(s.moving for s in segs)
+    head = f"Over {total:.0f} s the arm moved in {nm} stretch{'es' if nm != 1 else ''} and held still for {still:.0f} s."
     if holds:
         parts = [f"{a:.1f} s" + (f" (let go at {b:.1f} s)" if b != math.inf else " (still holding at the end)") for a, b in holds]
         head += f" It gripped {len(holds)} time{'s' if len(holds) > 1 else ''}: " + ", ".join(parts) + "."
@@ -218,6 +282,15 @@ def describe(frames: list[Frame]) -> Description:
             head += " The first grip was let go within 2 s: probably a failed grasp, then a retry."
     else:
         head += " The jaws never closed on anything."
+    misses = sum(e.endswith("a missed grasp") for _, e in events)
+    if misses:
+        head += f" {misses} grasp{'s' if misses > 1 else ''} closed on nothing."
+    faults = [e for _, e in events if "stops following" in e]
+    if faults:
+        head += " Fault: " + "; ".join(faults) + "."
+    gaps = sum(1 for a, b in zip(T, T[1:]) if b - a > 0.25)
+    if gaps:
+        head += f" Note: {gaps} gap{'s' if gaps > 1 else ''} in the recording (frames missing)."
     summary = head + " Sequence: " + "; then ".join(summary_bits[:12]) + ("…" if len(summary_bits) > 12 else ".")
     return Description(segs, events, "\n".join(lines), summary)
 
