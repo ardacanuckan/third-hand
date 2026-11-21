@@ -1,0 +1,86 @@
+diff --git a/software/ai/smolvla_py/scripts/train.py b/software/ai/smolvla_py/scripts/train.py
+index 84e1e0e..2688bc4 100644
+--- a/software/ai/smolvla_py/scripts/train.py
++++ b/software/ai/smolvla_py/scripts/train.py
+@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
+ DATASETS = ROOT.parent / "datasets"
+ CKPT_DIR = ROOT / "checkpoints"
+ IMAGE_KEYS = ("observation.images.cam0", "observation.images.cam1")
+-STATE_DIM = 6
++STATE_DIM = 6    # SO-101 default; the real value now comes from the dataset (ElRobot: 8)
+ ACTION_DIM = 6
+ 
+ DEFAULT_PARQUETS = [DATASETS / "dataset.parquet"]
+@@ -37,6 +37,7 @@ DEFAULT_PARQUETS = [DATASETS / "dataset.parquet"]
+ def parse_args() -> argparse.Namespace:
+     p = argparse.ArgumentParser()
+     p.add_argument("--steps", type=int, default=5000)
++    p.add_argument("--device", default="cuda", help="cuda (training), or cpu/mps for a quick smoke test")
+     p.add_argument("--batch-size", type=int, default=8)
+     p.add_argument("--lr", type=float, default=1e-4)
+     p.add_argument("--weight-decay", type=float, default=1e-10)
+@@ -121,31 +122,35 @@ def main() -> None:
+     args = parse_args()
+     torch.manual_seed(args.seed)
+ 
+-    if not torch.cuda.is_available():
+-        raise SystemExit("CUDA required.")
+-    device = torch.device("cuda")
++    if args.device == "cuda" and not torch.cuda.is_available():
++        raise SystemExit("CUDA required (use --device cpu only for a tiny smoke test).")
++    device = torch.device(args.device)
++    on_cuda = device.type == "cuda"
+ 
+     # Ampere/Ada perf flags — TF32 for residual FP32 matmuls and cuDNN autotune.
+     # Cheap, always-safe wins; behaviour unchanged at the (allowed) precision.
+     torch.set_float32_matmul_precision("high")
+-    torch.backends.cuda.matmul.allow_tf32 = True
+-    torch.backends.cudnn.allow_tf32 = True
+-    torch.backends.cudnn.benchmark = True
++    if on_cuda:
++        torch.backends.cuda.matmul.allow_tf32 = True
++        torch.backends.cudnn.allow_tf32 = True
++        torch.backends.cudnn.benchmark = True
+ 
+     # BF16 mixed-precision autocast on GPUs that support it (Ampere+).
+     # The model is already designed for it: smolvlm backbone loads as bf16 and
+     # flow_matching upcasts the final head to float32 before the loss. On older
+     # GPUs without bf16 (V100/T4/P100), this silently no-ops and we stay in fp32.
+-    use_bf16 = torch.cuda.is_bf16_supported()
++    use_bf16 = on_cuda and torch.cuda.is_bf16_supported()
+     print(
+-        f"GPU: {torch.cuda.get_device_name(0)} | "
+-        f"bf16 autocast: {'on' if use_bf16 else 'off (GPU lacks bf16, using fp32)'}"
++        f"device: {torch.cuda.get_device_name(0) if on_cuda else device} | "
++        f"bf16 autocast: {'on' if use_bf16 else 'off (fp32)'}"
+     )
+ 
+     args.output.mkdir(parents=True, exist_ok=True)
+ 
+     train_ds = PickAndPlaceDataset(args.parquets, image_keys=IMAGE_KEYS)
+     print(f"episodes: {train_ds.total_episodes}  frames: {len(train_ds)}")
++    state_dim = action_dim = int(train_ds.n_joints)            # ElRobot: 8 (j1..j7 + jaws); SO-101: 6
++    print(f"joints: {state_dim}")
+ 
+     stats = compute_stats(train_ds._state, train_ds._action)
+     stats_path = args.output / "stats.safetensors"
+@@ -161,8 +166,8 @@ def main() -> None:
+         args.base_checkpoint,
+         config_overrides={
+             "image_keys": list(IMAGE_KEYS),
+-            "state_dim": STATE_DIM,
+-            "action_dim": ACTION_DIM,
++            "state_dim": state_dim,
++            "action_dim": action_dim,
+             "load_vlm_weights": False,
+             "empty_cameras": 0,
+         },
+@@ -203,7 +208,7 @@ def main() -> None:
+             if step >= args.steps:
+                 break
+             batch = build_train_batch(raw_batch, policy, stats, device)
+-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_bf16):
++            with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=use_bf16):
+                 loss, info = policy.forward(batch)
+ 
+             opt.zero_grad(set_to_none=True)
