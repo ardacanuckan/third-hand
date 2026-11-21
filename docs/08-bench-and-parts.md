@@ -1,5 +1,7 @@
 # 08 · Bench and parts
 
+> **Superseded on Sat 21 Nov 15:30 by [10 · Plan v2: the resistor picker](10-plan-resistor-picker.md).** Kept for reference.
+
 ## Parts on the board (power stage of SOL-MIO v1.3)
 
 Positions are board millimetres in the Altium frame (origin bottom left, y up).

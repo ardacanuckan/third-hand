@@ -1,5 +1,7 @@
 # 04 · Demo design
 
+> **Superseded on Sat 21 Nov 15:30 by [10 · Plan v2: the resistor picker](10-plan-resistor-picker.md).** Kept for reference.
+
 ## One line
 
 **Soldering needs three hands. You have two.** Third Hand is the third: it fetches parts, shows where they go and checks your work, while you hold the iron and talk.

@@ -1,19 +1,18 @@
 # Third Hand
 
-A voice-driven soldering assistant on NormaCore's ElRobot arm, built for the **NormaCore "AI-Powered Robot Control"** track at the AI × Robotics Hackathon II (CIC Berlin, 21–22 November 2026).
+A voice-driven electronics build assistant on NormaCore's ElRobot arm, built for the **NormaCore "AI-Powered Robot Control"** track at the AI × Robotics Hackathon II (CIC Berlin, 21–22 November 2026).
 
-You hold the iron and talk. Claude has the arm fetch each part, lights up where it goes on a bench screen, and checks every solder joint with the wrist camera. The demo board is a fresh **SOL-MIO v1.3**, the controller of our soft rehabilitation glove. In the finale, a finished SOL-MIO drives the glove.
+**Current plan: the resistor picker ([docs/10](docs/10-plan-resistor-picker.md)).** You build an LED circuit on a breadboard and say which LED comes next. Claude works out the resistor, reads the colour bands of every resistor on a rack through the wrist camera, and the arm picks the right one. A SmolVLA policy that we fine-tune on NormaCore's stack does the grasp. Claude then shows on the bench screen where the resistor goes.
 
-## The loop for one part
+## The loop for one resistor
 
-1. You say "next part".
-2. Claude picks the part from the build plan and calls `show_footprint`. The bench screen lights up its footprint.
-3. The arm brings the cup holding that part to the handover zone (`fetch_part`).
-4. The side camera confirms the cup arrived (`look`). If it did not, Claude says so and retries.
-5. You place and solder the part.
-6. After the last part, the wrist camera inspects every joint (`inspect`). A cold joint gets circled on the screen (`mark_joint`) and Claude tells you how to fix it.
+1. You say "blue LED on pin 10". The circuit is an Arduino Uno and a breadboard: two LEDs and a button, powered over USB ([`board/led-circuit.json`](board/led-circuit.json)).
+2. Claude works out 150 Ω (brown, green, brown) and says it; `show_step` puts the calculation on the screen.
+3. `scan_rack`: the wrist camera passes over the six slots, and Claude reads each resistor.
+4. `pick(slot)`: the arm hovers over the slot, the fine-tuned policy grasps the resistor (a scripted grasp is the fallback), and the arm drops it in the dish by your hand.
+5. You plug it into the breadboard while the screen shows the holes. If someone swaps resistors, Claude scans again.
 
-Why a screen instead of the gripper pointing: the ElRobot's jaws are far wider than a 0603 resistor or a 1206 LED, so pointing with them is imprecise and covers the part. See [docs/04-demo-design.md](docs/04-demo-design.md).
+The first plan, the SOL-MIO cup demo, is in docs 04, 05 and 08, marked as superseded.
 
 ## Repository map
 
@@ -65,7 +64,7 @@ Open http://localhost:8000.
 
 ## Team and working rules
 
-Four workstreams, one owner each: **ARM** (robot runtime), **BRAIN** (agent), **SCREEN** (experience), **BENCH** (product, hardware and story). Deliverables, checkpoints and sleep shifts are in [docs/05-team-plan.md](docs/05-team-plan.md).
+Four roles, one owner each: **ROBOT** (robot and data), **VLA** (fine-tuning), **AGENT** (Claude and vision), **BENCH** (circuit, screen and story). Tasks, checkpoints and sleep shifts are in [docs/10-plan-resistor-picker.md](docs/10-plan-resistor-picker.md), with live status at https://claude.ai/artifact/DuCRQLU5JGacwz4uvjZpJj.
 
 - Everyone runs Claude Code from the repo root. [`CLAUDE.md`](CLAUDE.md) holds the rules it follows.
 - Contracts first: nobody changes `contracts/` without the other side agreeing.
@@ -82,6 +81,8 @@ Four workstreams, one owner each: **ARM** (robot runtime), **BRAIN** (agent), **
 6. [Contracts](docs/06-contracts.md): robot interface, MCP tools, screen API, build plan format
 7. [Risks](docs/07-risks.md): what can break on stage and the fallback for each
 8. [Bench and parts](docs/08-bench-and-parts.md): parts, cups, bench kit, pre-event checklist
+9. [Architecture](docs/09-architecture.md): processes, Hub API, MCP tools, build state, safety layers (proposal)
+10. **[Plan v2: the resistor picker](docs/10-plan-resistor-picker.md): current demo, system, tasks per person, checkpoints, fallbacks**
 
 ## Prior work and credits
 

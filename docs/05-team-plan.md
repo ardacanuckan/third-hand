@@ -1,5 +1,7 @@
 # 05 · Team plan
 
+> **Superseded on Sat 21 Nov 15:30 by [10 · Plan v2: the resistor picker](10-plan-resistor-picker.md).** Kept for reference.
+
 Four people, four workstreams. Each person owns a whole system and one moment on stage. Claude Code makes each of us several times faster, so the plan is bigger than a normal hackathon plan. All times Berlin.
 
 Live tracker with shared status and owner names: https://claude.ai/artifact/DuCRQLU5JGacwz4uvjZpJj (private; ask the BENCH owner for Contributor access).

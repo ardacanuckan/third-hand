@@ -4,7 +4,14 @@ Guidance for Claude Code in this repository. Every teammate runs Claude Code fro
 
 ## What we are building
 
-Third Hand: a voice-driven soldering assistant on NormaCore's ElRobot (8 ST3215 servos, 7 joints plus jaws) and NormaCore Station. Claude fetches parts with the arm, lights up footprints on a bench screen, and inspects solder joints through the cameras. The demo board is a fresh SOL-MIO v1.3. Read `docs/04-demo-design.md` before making product decisions.
+Third Hand: a voice-driven electronics build assistant on NormaCore's ElRobot (8 ST3215 servos, 7 joints plus jaws) and NormaCore Station.
+
+**Current plan (since Sat 15:30): the resistor picker.**
+- The person builds an Arduino Uno LED circuit on a breadboard, with no soldering.
+- Claude works out each resistor and reads the colour bands of the resistors on a rack through the wrist camera.
+- The arm picks the right one: a SmolVLA policy fine-tuned with NormaCore's `smolvla_py` does the grasp, with a scripted grasp as the fallback.
+
+Read `docs/10-plan-resistor-picker.md` before making product decisions. Docs 04, 05 and 08 (the SOL-MIO cup demo) are superseded.
 
 ## Repo map
 
@@ -22,7 +29,7 @@ Third Hand: a voice-driven soldering assistant on NormaCore's ElRobot (8 ST3215 
 - All motion goes through `robot_lib` functions that clamp targets to calibrated ranges and limit the step per call. The model never sends raw register writes.
 - The shoulder (`j2`) faults under load when commanded straight to a reach pose: move in small steps and tuck the elbow (`j3`) before lifting the shoulder.
 - Read joint state from the motor bus (`st3215/inference`), not from camera frames; the camera bridge can freeze.
-- Someone stays at the power switch whenever the arm moves. Keep speed low near hands and the iron.
+- Someone stays at the power switch whenever the arm moves. Keep speed low near hands.
 
 ## Conventions
 

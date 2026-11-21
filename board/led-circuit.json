@@ -1,0 +1,62 @@
+{
+  "name": "Arduino Uno: two LEDs and a button on a breadboard",
+  "status": "draft layout: BENCH moves holes to match the real breadboard",
+  "power": "USB from the laptop into the Uno. The Uno's 5V and GND feed the breadboard rails. No battery, no soldering.",
+  "supply_v": 5,
+  "rule": "LED resistor R = (5 V - vf) / target current, then the nearest value on the rack; keep every pin at or below 20 mA. The button uses a 10 kOhm pull-down so the pin reads LOW until it is pressed.",
+  "pins": { "D9": "red LED through R1", "D10": "blue LED through R2", "D2": "button to 5 V, R3 pull-down to GND" },
+  "board": {
+    "type": "half-size breadboard",
+    "rows": 30,
+    "columns": "a-e and f-j, split by the centre gap; a + and a - rail on each side",
+    "coords": "row number plus column letter, e.g. b10; rails are '+L', '-L' (left) and '+R', '-R' (right)"
+  },
+  "prefit": [
+    { "ref": "W5V", "what": "jumper, Uno 5V to the left + rail", "from": "Uno 5V", "to": "+L" },
+    { "ref": "WGND", "what": "jumper, Uno GND to the left - rail", "from": "Uno GND", "to": "-L" },
+    { "ref": "WRAIL", "what": "jumpers joining left and right rails", "links": [["+L", "+R"], ["-L", "-R"]] },
+    { "ref": "WD9", "what": "jumper, Uno D9", "from": "Uno D9", "to": "a10" },
+    { "ref": "WD10", "what": "jumper, Uno D10", "from": "Uno D10", "to": "a20" },
+    { "ref": "WD2", "what": "jumper, Uno D2", "from": "Uno D2", "to": "j6" },
+    { "ref": "D1", "what": "5 mm red LED, long leg (anode) in row 14", "anode": "c14", "cathode": "c15" },
+    { "ref": "WD1", "what": "jumper, red LED cathode row to ground", "from": "e15", "to": "-L" },
+    { "ref": "D2", "what": "5 mm blue LED, long leg (anode) in row 24", "anode": "c24", "cathode": "c25" },
+    { "ref": "WD2G", "what": "jumper, blue LED cathode row to ground", "from": "e25", "to": "-L" },
+    { "ref": "S1", "what": "6 mm push button across the centre gap", "legs": ["e4", "f4", "e6", "f6"] },
+    { "ref": "WS1", "what": "jumper, button top row to 5 V", "from": "a4", "to": "+L" }
+  ],
+  "steps": [
+    {
+      "ref": "R2", "for": "D2", "what": "blue LED on D10", "vf": 3.1, "target_ma": 13,
+      "value_ohm": 150, "bands": ["brown", "green", "brown", "gold"], "current_ma": 12.7, "power_w": 0.02,
+      "say": "Blue LED on an Arduino pin: 5 minus 3.1 is 1.9 volts. At 13 milliamps that is 150 ohms. Brown, green, brown.",
+      "holes": ["b20", "b24"]
+    },
+    {
+      "ref": "R1", "for": "D1", "what": "red LED on D9", "vf": 2.0, "target_ma": 13,
+      "value_ohm": 220, "bands": ["red", "red", "brown", "gold"], "current_ma": 13.6, "power_w": 0.04,
+      "say": "The red LED drops less voltage, so it needs more resistance for the same brightness: 3 volts at 13 milliamps is 220 ohms. Red, red, brown.",
+      "holes": ["b10", "b14"]
+    },
+    {
+      "ref": "R3", "for": "S1", "what": "pull-down for the button on D2", "value_ohm": 10000,
+      "bands": ["brown", "black", "orange", "gold"], "current_ma": 0.5, "power_w": 0.003,
+      "say": "The button needs a pull-down so D2 reads LOW until you press it. 10 kilo-ohms: brown, black, orange.",
+      "holes": ["i6", "-R"]
+    }
+  ],
+  "finale": "Claude writes the sketch (press the button, the LEDs take turns), compiles and uploads it with arduino-cli (board arduino:avr:uno), then checks through the table camera that both LEDs light.",
+  "rack": {
+    "slots": 6,
+    "values_ohm": [150, 220, 330, 470, 680, 10000],
+    "bands": {
+      "150": ["brown", "green", "brown", "gold"],
+      "220": ["red", "red", "brown", "gold"],
+      "330": ["orange", "orange", "brown", "gold"],
+      "470": ["yellow", "violet", "brown", "gold"],
+      "680": ["blue", "grey", "brown", "gold"],
+      "10000": ["brown", "black", "orange", "gold"]
+    },
+    "note": "Every value has a different pair of first two bands. 330, 470 and 680 are distractors. Keep 1 kOhm off the rack: it differs from 10 kOhm only in the third band."
+  }
+}
