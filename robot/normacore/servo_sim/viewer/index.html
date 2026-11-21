@@ -1,0 +1,325 @@
+<title>ElRobot Character Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide rehearsal stage with three arms side by side, a control strip under it, then the settings table. */
+:root{
+  --bg:#e9edf1; --panel:#f7f9fb; --stage:#dfe5eb; --ink:#18202a; --muted:#5a6878; --line:#c6d0da;
+  --accent:#c56a12; --slot-a:#c56a12; --slot-b:#16808a; --slot-c:#6b54b8; --warn:#b3261e; --ok:#2f7d4a;
+  --display:"Archivo","Arial Narrow",system-ui,sans-serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --panel:#1a2028; --stage:#161c23; --ink:#e6ebf0; --muted:#94a3b3; --line:#2c3642;
+  --accent:#f0a04b; --slot-a:#f0a04b; --slot-b:#3fc1c9; --slot-c:#a894f0; --warn:#ff8a80; --ok:#7bd69a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --panel:#1a2028; --stage:#161c23; --ink:#e6ebf0; --muted:#94a3b3; --line:#2c3642;
+  --accent:#f0a04b; --slot-a:#f0a04b; --slot-b:#3fc1c9; --slot-c:#a894f0; --warn:#ff8a80; --ok:#7bd69a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-direction:column;gap:6px;max-width:72ch}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:800 clamp(30px,5vw,46px)/1.02 var(--display);font-stretch:80%;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font:700 22px/1.15 var(--display);font-stretch:85%;margin:0;text-wrap:balance}
+.lead{color:var(--muted);margin:0}
+.stage{position:relative;background:var(--stage);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+#c{display:block;width:100%;aspect-ratio:16/8;max-width:100%;cursor:grab;touch-action:none}
+#loading{position:absolute;inset:0;display:grid;place-items:center;font:500 13px var(--mono);color:var(--muted)}
+.slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+.slot{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0;border-left:1px solid var(--line)}
+.slot:first-child{border-left:0}
+.slot .tag{display:flex;align-items:baseline;gap:8px;min-width:0}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;transform:translateY(1px)}
+.slot .nm{font:700 18px/1.1 var(--display);font-stretch:85%;text-transform:capitalize}
+.slot .ar{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .lab{font:400 11.5px/1.3 var(--mono);color:var(--muted)}
+.spark{width:100%;height:38px;display:block}
+.slot .pk{font:500 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.group{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.glabel{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.chip{font:500 13.5px var(--body);border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:5px 12px;cursor:pointer;text-transform:capitalize}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.play{font:600 14px var(--body);background:var(--accent);color:#fff;border:0;border-radius:4px;padding:7px 16px;cursor:pointer;min-width:84px}
+:root[data-theme="dark"] .play{color:#1a1206}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .play{color:#1a1206}}
+.timeline{display:flex;align-items:center;gap:10px;flex:1 1 260px;min-width:0}
+#scrub{flex:1;min-width:0;accent-color:var(--accent)}
+.time{font:500 13px var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+select{font:500 13px var(--body);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:5px 8px}
+.hint{font-size:12.5px;color:var(--muted)}
+.cast{display:flex;flex-direction:column;gap:8px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:900px;font-size:13px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--panel);position:sticky;top:0}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.nm{font:700 15px var(--display);font-stretch:85%;text-transform:capitalize;white-space:nowrap}
+td .sub{display:block;font:400 12px var(--body);color:var(--muted);font-stretch:100%;text-transform:none}
+.bars{display:grid;grid-template-columns:repeat(8,18px);gap:3px;align-items:end;height:34px}
+.bars i{display:block;background:var(--accent);border-radius:1px;min-height:2px;position:relative}
+.bars i.j2,.bars i.j3{background:var(--muted)}
+.barlab{display:grid;grid-template-columns:repeat(8,18px);gap:3px;font:400 9.5px var(--mono);color:var(--muted);text-align:center}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.pill{display:inline-block;font:500 11.5px var(--mono);padding:2px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.notes p{margin:4px 0 0;color:var(--muted);font-size:14px;max-width:62ch}
+.notes h3{font:700 15px var(--display);font-stretch:90%;margin:0}
+@media (max-width:640px){
+  #c{aspect-ratio:4/3}
+  .slot{padding:10px 8px}.slot .ar,.slot .lab{display:none}.slot .nm{font-size:15px}
+}
+@media (prefers-reduced-motion: reduce){.chip{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Third Hand · ElRobot · STS3215</div>
+    <h1>Character Studio</h1>
+    <p class="lead">Ten personalities for the 8-servo arm, side by side. Each arm plays the motion the servos produce in a physics simulation (real ElRobot masses, STS3215 acceleration ramps and torque limits), not just the plan.</p>
+  </header>
+
+  <section class="stage" aria-label="Three simulated arms">
+    <canvas id="c" aria-label="3D view: drag to orbit, scroll to zoom"></canvas>
+    <div id="loading">Loading the ElRobot model…</div>
+    <div class="slots" id="slots"></div>
+  </section>
+
+  <div class="controls">
+    <button class="play" id="play" type="button">Pause</button>
+    <div class="timeline">
+      <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Position in the clip">
+      <span class="time" id="time">0.0 / 0.0 s</span>
+    </div>
+    <label class="group"><span class="glabel">Speed</span>
+      <select id="speed"><option value="1">1×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select>
+    </label>
+    <div class="group" id="gestures" role="group" aria-label="Gesture"><span class="glabel">Gesture</span></div>
+  </div>
+
+  <div class="cast">
+    <div class="group" id="cast" role="group" aria-label="Characters on stage"><span class="glabel">On stage</span></div>
+    <div class="hint">Pick up to three characters. The oldest pick leaves when you add a fourth. Click a table row to put that character on stage.</div>
+  </div>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>Settings per character</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Character</th><th>Laban effort</th><th>Acceleration j1–j8</th><th>Beat</th><th>Size</th><th>Flow</th><th>Anticip.</th><th>Overshoot</th><th>Tremor</th><th>Shoulder peak</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div class="hint">Acceleration is the STS3215 register 0x29 (units of 100 ticks/s², 254 max). Grey bars are the shoulder and elbow, capped at 30 and 40 for every character because the simulation showed fast elbow moves overloading the shoulder. Shoulder peak is the highest load over all ten clips, standing pose, as a share of 2.94 N·m stall torque.</div>
+  </section>
+
+  <section class="notes">
+    <div><h3>How the clips were made</h3><p>Each character's gesture is planned by <code>character.py</code>, then played on a MuJoCo model of the ElRobot with real 55 g servos. Every servo runs a model of the STS3215 firmware: speed and acceleration ramp, position loop, 2.94 N·m and 4.71 rad/s motor limits. The arms show the joint angles that came out, at 30 frames per second.</p></div>
+    <div><h3>What to look for</h3><p>Same gesture, different settings. The trickster winds up and overshoots, the grump stops dead at each pose, the shy one barely moves and waits, and smooth never stops inside a gesture because it follows a minimum-jerk curve instead of jumping between poses.</p></div>
+    <div><h3>Limits</h3><p>Servo gain, rotor inertia and backlash are estimates; the real arm will differ a little. Joint directions depend on calibration, so a gesture can mirror on your arm (flip it in <code>SIGN</code>). Station and network delay are not in the clips.</p></div>
+  </section>
+</div>
+
+<script src="elrobot-model.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildRobot } from './core.js';
+
+const $ = (s) => document.querySelector(s);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SLOT_VARS = ['--slot-a', '--slot-b', '--slot-c'];
+const GESTURE_ORDER = ['curious', 'yes', 'no', 'hello', 'look_around', 'startle', 'sigh', 'laugh', 'sulk', 'idle'];
+const label = (g) => g.replace('_', ' ');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let data, gesture = 'curious', cast = ['trickster', 'smooth', 'grump'];
+let playing = !reduce, speed = 1, t = 0;
+
+/* ---------- three.js stage ---------- */
+const canvas = $('#c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 2, 0.01, 10);
+camera.position.set(0.55, 0.42, 1.25);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 0.14, 0); controls.enableDamping = true; controls.minDistance = 0.4; controls.maxDistance = 3;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8892a0, 1.6));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(1.2, 2, 1.4); scene.add(key);
+const rim = new THREE.DirectionalLight(0xffffff, 0.8); rim.position.set(-1.5, 1, -1); scene.add(rim);
+
+const PLA = new THREE.MeshStandardMaterial({ color: '#c3cad1', roughness: 0.65, flatShading: true });
+const PLA_DARK = new THREE.MeshStandardMaterial({ color: '#a9b2bb', roughness: 0.6, flatShading: true });
+const SERVO = new THREE.MeshStandardMaterial({ color: '#1a1c1f', roughness: 0.42, metalness: 0.15, flatShading: true });
+const floorMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, transparent: true, opacity: 0.0 });
+
+const XS = [-0.36, 0, 0.36];
+const arms = XS.map((x, i) => {
+  const holder = new THREE.Group(); holder.position.x = x; scene.add(holder);
+  const zup = new THREE.Group(); zup.rotation.x = -Math.PI / 2; zup.rotation.z = Math.PI; holder.add(zup);   // URDF is Z-up, facing +Y -> face the camera
+  const robot = buildRobot(window.ELROBOT, (link) => link.startsWith('ST3215') ? SERVO
+    : (link.startsWith('Gripper_Jaw') || link === 'Gripper_Gear_v1_1') ? PLA_DARK : PLA);
+  zup.add(robot.root);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.006, 48), new THREE.MeshStandardMaterial({ roughness: 0.7 }));
+  base.position.y = -0.003; holder.add(base);
+  return { robot, base };
+});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), floorMat); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.007; scene.add(ground);
+
+function paintSlots() { arms.forEach((a, i) => a.base.material.color.set(css(SLOT_VARS[i]))); }
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  camera.position.setLength(w < 520 ? 1.9 : 1.45);
+}
+new ResizeObserver(resize).observe(canvas);
+
+/* ---------- clips ---------- */
+const clip = (name) => data.clips[`${name}/${gesture}`];
+const duration = () => Math.max(...cast.map((n) => clip(n).q.length)) / data.fps;
+
+function pose(i, frame) {
+  const q = frame;
+  data.joints.forEach((j, k) => arms[i].robot.set(j, q[k]));
+}
+
+function render() {
+  const fi = Math.floor(t * data.fps);
+  arms.forEach((a, i) => {
+    const name = cast[i];
+    a.base.visible = a.robot.root.visible = !!name;
+    if (!name) return;
+    const c = clip(name);
+    pose(i, c.q[Math.min(fi, c.q.length - 1)]);
+  });
+  drawSparks(fi);
+  const d = duration();
+  $('#time').textContent = `${t.toFixed(1)} / ${d.toFixed(1)} s`;
+  if (document.activeElement !== $('#scrub')) $('#scrub').value = Math.round((t / d) * 1000);
+}
+
+/* ---------- slot cards with shoulder-torque sparklines ---------- */
+function buildSlots() {
+  const box = $('#slots'); box.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const n = cast[i], ch = n && data.characters[n];
+    const el = document.createElement('div'); el.className = 'slot';
+    el.innerHTML = n ? `<div class="tag"><span class="dot" style="background:var(${SLOT_VARS[i]})"></span><span class="nm">${n}</span><span class="ar">${ch.archetype}</span></div>
+      <div class="lab">${ch.laban}</div><canvas class="spark" data-i="${i}" aria-label="Shoulder load over the clip"></canvas>
+      <div class="pk">shoulder peak ${clip(n).peak}% of stall</div>`
+      : `<div class="tag"><span class="dot" style="background:var(--line)"></span><span class="nm" style="color:var(--muted)">empty</span></div><div class="lab">pick a character below</div>`;
+    box.append(el);
+  }
+}
+function drawSparks(fi) {
+  document.querySelectorAll('.spark').forEach((cv) => {
+    const i = +cv.dataset.i, c = clip(cast[i]); if (!c) return;
+    const w = cv.clientWidth, h = cv.clientHeight, r = Math.min(devicePixelRatio, 2);
+    if (cv.width !== w * r) { cv.width = w * r; cv.height = h * r; }
+    const g = cv.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, w, h);
+    const n = Math.max(...cast.filter(Boolean).map((x) => clip(x).torque.length));
+    const X = (k) => (k / (n - 1)) * w, Y = (v) => h - 2 - (v / 100) * (h - 4);
+    g.strokeStyle = css('--line'); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, Y(50)); g.lineTo(w, Y(50)); g.stroke(); g.setLineDash([]);
+    const col = css(SLOT_VARS[i]);
+    g.beginPath(); c.torque.forEach((v, k) => k ? g.lineTo(X(k), Y(v)) : g.moveTo(X(k), Y(v)));
+    g.lineTo(X(c.torque.length - 1), h); g.lineTo(0, h); g.closePath();
+    g.globalAlpha = 0.16; g.fillStyle = col; g.fill(); g.globalAlpha = 1;
+    g.beginPath(); c.torque.forEach((v, k) => k ? g.lineTo(X(k), Y(v)) : g.moveTo(X(k), Y(v)));
+    g.strokeStyle = col; g.lineWidth = 1.5; g.stroke();
+    const k = Math.min(fi, c.torque.length - 1);
+    g.fillStyle = col; g.beginPath(); g.arc(X(k), Y(c.torque[k]), 3, 0, 7); g.fill();
+    g.fillStyle = css('--muted'); g.font = '10px ' + css('--mono'); g.fillText('50 %', 2, Y(50) - 3);
+  });
+}
+
+/* ---------- controls ---------- */
+function buildChips() {
+  const gs = $('#gestures');
+  for (const g of GESTURE_ORDER) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = label(g); b.id = 'g-' + g;
+    b.addEventListener('click', () => { gesture = g; t = 0; update(); });
+    gs.append(b);
+  }
+  const cs = $('#cast');
+  for (const n of Object.keys(data.characters)) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.id = 'c-' + n; b.dataset.n = n;
+    b.innerHTML = `<span class="sw"></span>${n}`;
+    b.addEventListener('click', () => toggle(n));
+    cs.append(b);
+  }
+}
+function toggle(n) {
+  const i = cast.indexOf(n);
+  if (i >= 0) { if (cast.filter(Boolean).length > 1) cast[i] = null; }
+  else {
+    const free = cast.indexOf(null);
+    if (free >= 0) cast[free] = n; else { cast.shift(); cast.push(n); }
+  }
+  t = 0; update();
+}
+function update() {
+  document.querySelectorAll('#gestures .chip').forEach((b) => b.setAttribute('aria-pressed', b.id === 'g-' + gesture));
+  document.querySelectorAll('#cast .chip').forEach((b) => {
+    const i = cast.indexOf(b.dataset.n);
+    b.setAttribute('aria-pressed', i >= 0);
+    b.querySelector('.sw').style.background = i >= 0 ? `var(${SLOT_VARS[i]})` : 'var(--line)';
+  });
+  buildSlots(); render();
+}
+$('#play').addEventListener('click', () => { playing = !playing; $('#play').textContent = playing ? 'Pause' : 'Play'; });
+$('#speed').addEventListener('change', (e) => { speed = +e.target.value; });
+$('#scrub').addEventListener('input', (e) => { t = (e.target.value / 1000) * duration(); render(); });
+
+/* ---------- settings table ---------- */
+function buildTable() {
+  const tb = $('#rows'); tb.innerHTML = '';
+  for (const [n, c] of Object.entries(data.characters)) {
+    const peak = Math.max(...Object.entries(data.clips).filter(([k]) => k.startsWith(n + '/')).map(([, v]) => v.peak));
+    const bars = Object.entries(c.acc).map(([j, a]) => `<i class="${j}" style="height:${Math.max(2, (a / 254) * 34)}px" title="${j}: acc ${a}"></i>`).join('');
+    const flow = c.smooth ? 'min-jerk curve' : c.blend ? `free, ${Math.round(c.blend * 100)} % overlap` : 'bound, waits';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="nm">${n}<span class="sub">${c.archetype}</span></td>
+      <td>${c.laban}</td>
+      <td><div class="bars">${bars}</div><div class="barlab">${Object.keys(c.acc).map((j) => `<span>${j}</span>`).join('')}</div></td>
+      <td class="num">${c.tempo.toFixed(2)} s</td><td class="num">${c.size.toFixed(1)}×</td><td>${flow}</td>
+      <td class="num">${c.anticipation ? Math.round(c.anticipation * 100) + ' %' : '–'}</td>
+      <td class="num">${c.overshoot ? Math.round(c.overshoot * 100) + ' %' : '–'}</td>
+      <td class="num">${c.tremor ? c.tremor.toFixed(3) : '–'}</td>
+      <td><span class="pill ok">${peak} %</span></td>`;
+    tr.addEventListener('click', () => { if (!cast.includes(n)) toggle(n); window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' }); });
+    tb.append(tr);
+  }
+}
+
+/* ---------- loop ---------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (playing && data) { t += dt * speed; if (t > duration()) t = 0; render(); }
+  controls.update(); renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+fetch('anim.json').then((r) => r.json()).then((d) => {
+  data = d;
+  $('#loading').hidden = true;
+  paintSlots(); buildChips(); buildTable(); update(); resize();
+  $('#play').textContent = playing ? 'Pause' : 'Play';
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { paintSlots(); render(); });
+  new MutationObserver(() => { paintSlots(); render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+}).catch((e) => { $('#loading').textContent = 'Could not load the animation data: ' + e.message; });
+requestAnimationFrame(frame);
+</script>

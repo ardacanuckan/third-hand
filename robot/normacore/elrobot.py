@@ -59,6 +59,24 @@ REG_CURRENT = 0x45
 OVERLOAD_BIT = 0x20
 SAFETY_MARGIN = 20  # raw ticks kept away from each calibrated end stop
 
+# Per-joint motion profile for STS3215 servos. acc is register 0x29 in units of 100 ticks/s^2
+# (1..254; 0 would mean "no ramp"). Values from servo_sim/servo_sim.py (MuJoCo, real ElRobot URDF,
+# +30 g cup, STS3215 motor model): time to the first visible 5 ticks, peak torque of 2.94 N*m stall:
+#   wrist acc 20 -> ~90 ms (the measured lag), 100 -> ~51 ms, 150 -> ~44 ms, peak torque <= 20 %
+#   shoulder acc 20 -> ~99 ms / 36-45 %, 30 -> ~86 ms / 38-47 %, 50 -> ~73 ms / 43-53 %  (gravity alone ~28-36 %)
+# Speed does not change the start-up delay; it sets how long the whole move takes.
+# fast=True joints are sent their goal in one write and the servo's own speed/acc ramp smooths it.
+JOINT_PROFILE: dict[str, dict] = {
+    "j1": dict(acc=40,  speed=600, fast=False),   # base rotation, carries the whole arm (not simulated)
+    "j2": dict(acc=30,  speed=600, fast=False),   # shoulder: gentle, stepped; raise to 50 only if no overload trips
+    "j3": dict(acc=60,  speed=700, fast=False),   # elbow: ~65 ms, overshoot ~1 deg
+    "j4": dict(acc=100, speed=800, fast=True),
+    "j5": dict(acc=150, speed=900, fast=True),    # wrist pitch: ~45 ms, overshoot < 0.2 deg
+    "j6": dict(acc=150, speed=900, fast=True),
+    "j7": dict(acc=150, speed=900, fast=True),    # wrist rotation: ~44 ms
+    "j8": dict(acc=150, speed=900, fast=True),    # jaws: ~44 ms
+}
+
 
 class RobotError(RuntimeError):
     """Something the caller must handle: no bus, wrong bus, overload, timeout."""
@@ -298,25 +316,35 @@ class ElRobot:
             values[mid] = norm_to_raw(g, m.range_min, m.range_max).to_bytes(2, "little")
         await send_commands(self.client, [sync_write(self.follower, REG_GOAL, values)])
 
-    async def move(self, targets: dict[str, float], *, step: float = 0.04, dt: float = 0.12,
-                   speed: int = 600, acc: int = 20, tol: float = 0.015, timeout: float = 6.0) -> dict[str, float]:
-        """Move joints to targets (0..1) in small steps so the shoulder never takes the full load at once.
+    async def move(self, targets: dict[str, float], *, step: float | None = None, dt: float = 0.12,
+                   speed: int | None = None, acc: int | None = None, tol: float = 0.015,
+                   timeout: float = 6.0) -> dict[str, float]:
+        """Move joints to targets (0..1).
 
+        Speed and acceleration come from JOINT_PROFILE per joint unless given. Moves that touch
+        only fast joints (j4..j8) go out as one goal; moves with j1..j3 are stepped (0.04 every dt)
+        so the shoulder never takes the full load at once.
         Lift with the elbow (j3) tucked first and the shoulder (j2) second; send those as two moves.
         """
         goal = {_jid(j): max(0.0, min(1.0, float(v))) for j, v in targets.items()}
         bus = await self.state()
         self.check_faults(bus)
         start = {mid: bus.motors[mid].norm for mid in goal}
+        prof = {mid: JOINT_PROFILE[f"j{mid}"] for mid in goal}
         await send_commands(self.client, [
-            sync_write(self.follower, REG_SPEED, {mid: int(speed).to_bytes(2, "little") for mid in goal}),
-            sync_write(self.follower, REG_ACC, {mid: bytes([max(0, min(254, int(acc)))]) for mid in goal}),
+            sync_write(self.follower, REG_SPEED,
+                       {mid: int(speed if speed is not None else prof[mid]["speed"]).to_bytes(2, "little") for mid in goal}),
+            sync_write(self.follower, REG_ACC,
+                       {mid: bytes([max(1, min(254, int(acc if acc is not None else prof[mid]["acc"])))]) for mid in goal}),
         ])
+        if step is None:
+            step = 1.0 if all(p["fast"] for p in prof.values()) else 0.04
         n = max(1, math.ceil(max(abs(goal[m] - start[m]) for m in goal) / step))
         for i in range(1, n + 1):
             await self._goals(bus, {m: start[m] + (goal[m] - start[m]) * i / n for m in goal})
-            await asyncio.sleep(dt)
-            self.check_faults(self._buses.get(self.follower, bus))
+            if i < n:                       # no pause after the last (or only) write
+                await asyncio.sleep(dt)
+                self.check_faults(self._buses.get(self.follower, bus))
         deadline = time.monotonic() + timeout
         while True:
             bus = await self.state()
@@ -326,11 +354,11 @@ class ElRobot:
                 if time.monotonic() > deadline:
                     log.warning("move ended off target: %s", {f"j{m}": round(now[m] - goal[m], 3) for m in goal})
                 return {f"j{m}": now[m] for m in goal}
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.01)
 
     async def gripper(self, norm: float, **kw) -> dict[str, float]:
         """Open or close the jaws (j8). Open is about JAWS_OPEN; smaller values close."""
-        return await self.move({"j8": norm}, step=kw.pop("step", 0.1), **kw)
+        return await self.move({"j8": norm}, **kw)
 
     async def hold(self) -> None:
         """Stop where the arm is now: set every goal to the current position."""
