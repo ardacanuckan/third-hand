@@ -9,6 +9,12 @@ screen/bench-screen/guide_state.json
 *.tmp
 station_data/
 
+# local robot setup (binaries, serials, captures)
+robot/normacore/bin/
+robot/normacore/.env
+robot/normacore/station.local.yaml
+robot/normacore/snapshots/
+
 # Node and tools
 node_modules/
 

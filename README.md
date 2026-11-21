@@ -29,6 +29,20 @@ Why a screen instead of the gripper pointing: the ElRobot's jaws are far wider t
 
 ## Quick start
 
+Robot (full steps in [robot/normacore/README.md](robot/normacore/README.md)):
+
+```bash
+bash robot/normacore/install_station.sh
+```
+
+```bash
+bash robot/normacore/run_station.sh
+```
+
+```bash
+python3 robot/normacore/examples/01_list_buses.py
+```
+
 Bench screen (the monitor next to the bench):
 
 ```bash

@@ -28,7 +28,10 @@ Station is a single binary that owns the servos and cameras, records everything 
 | Goal position | `0x2A` | 2 bytes, little endian, raw ticks |
 | Goal speed | `0x2E` | write before the goal |
 | Present position | `0x38` | 2 bytes, sign bit `0x8000` |
-| Status | `0x41` | `0x20` = overload fault |
+| Status | `0x41` | `0x20` = overload fault. norma-core's teleop example names `0x40` as status; the June team saw overload at `0x41`, which matches the Feetech STS map. `elrobot.py` reads `0x41`. |
+| Present current | `0x45` | mA |
+
+Ready-to-use code for all of this is in [`robot/normacore/`](../robot/normacore).
 
 Each motor's calibrated `range_min`/`range_max` comes with its state; map 0..1 to that range. Send speed and acceleration first, then all goals in one `sync_write` so the joints move together.
 

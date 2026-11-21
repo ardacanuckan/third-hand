@@ -1,0 +1,3 @@
+norma-core v0.1.0-beta.10 (5f4f8059deb0be9b8fa4de231a8754531bf3ffe1)
+https://github.com/norma-core/norma-core/tree/v0.1.0-beta.10
+Python stubs in target/gen_python generated with shared/gremlin_py/gremlin.py from protobufs/.

@@ -1,0 +1,29 @@
+# Default Station config for Third Hand (Station v0.1.0-beta.10).
+# Copy to station.local.yaml (git-ignored) and fill in the follower bus serial there.
+
+drivers:
+  # ElRobot servo buses (leader and follower), ST3215 servos
+  st3215:
+    enabled: true
+    current-threshold: 200   # mA. The June team raised this from 100 to stop shoulder (j2) overload trips.
+    deadband: 20
+
+  system-info: true
+
+  # Wrist and table cameras (UVC). Station opens them itself; do not open them again from Python.
+  usb-video:
+    enabled: true
+    resolution: auto
+    resize_target: 448       # short side in px. 224 is the default; joint inspection needs more pixels.
+    frame-skip: 0
+
+# Joints + camera JPEGs together, read by elrobot.frames().
+inference:
+  - queue-id: inference/normvla
+    shm: /tmp/normvla
+    shm-size-mb: 24
+    format: normvla
+    # With leader AND follower connected, "auto" is ambiguous and this bridge freezes.
+    # Put the follower's serial here (see examples/01_list_buses.py), e.g. "5B61034836".
+    st3215-bus: auto
+    update-interval: 100ms
