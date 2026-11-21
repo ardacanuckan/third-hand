@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bench Screen · SOL-MIO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; background: #0c1014; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .hud { position: fixed; left: 12px; top: 10px; font: 12px "IBM Plex Mono", ui-monospace, Menlo, monospace; color: #8a99a6; pointer-events: none; }
+  .hud b { color: #55c983; font-weight: 500; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="SOL-MIO board with the next part's footprint highlighted"></canvas>
+<div class="hud" id="hud"></div>
+<script src="solmio-board.js"></script>
+<script src="bench-screen.js"></script>
+<script>
+  const canvas = document.getElementById('c'), hud = document.getElementById('hud');
+  const scr = BenchScreen.create(canvas, { instant: new URLSearchParams(location.search).has('instant') });
+  const refs = BenchScreen.TARGETS.map((t) => t.ref);
+  let rot = false, live = false, lastT = null, manual = 0;
+  try { rot = localStorage.getItem('bench-rot') === '1'; } catch (e) { /* storage unavailable */ }
+
+  function size() { const d = window.devicePixelRatio || 1; canvas.width = Math.round(innerWidth * d); canvas.height = Math.round(innerHeight * d); }
+  addEventListener('resize', size); size();
+
+  const manualState = (i) => ({ ref: refs[i], mode: 'place', placed: refs.slice(0, i), flags: [], message: '' });
+  scr.set({ ...manualState(0), rot180: rot });
+
+  async function poll() {
+    try {
+      const r = await fetch('guide_state.json?ts=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const s = await r.json();
+      live = true;
+      if (s.t !== lastT) { lastT = s.t; scr.set({ ...s, rot180: rot }); }
+    } catch (e) { live = false; }
+    hud.innerHTML = live ? '<b>●</b> live · guide_state.json · R rotate · F fullscreen' : 'manual · ← → step · R rotate · F fullscreen';
+    setTimeout(poll, 250);
+  }
+  if (location.protocol.startsWith('http')) poll();
+  else hud.textContent = 'manual (serve this folder over http to follow Claude) · ← → step · R rotate · F fullscreen';
+
+  addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R') { rot = !rot; try { localStorage.setItem('bench-rot', rot ? '1' : '0'); } catch (err) { /* storage unavailable */ } scr.set({ ...scr.state, rot180: rot }); }
+    if (e.key === 'f' || e.key === 'F') { (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}); }
+    if (live) return;
+    if (e.key === 'ArrowRight') manual = Math.min(refs.length, manual + 1);
+    if (e.key === 'ArrowLeft') manual = Math.max(0, manual - 1);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') scr.set(manual < refs.length ? { ...manualState(manual), rot180: rot } : { ref: null, mode: 'done', placed: refs, ledOn: true, rot180: rot });
+  });
+
+  const loop = (t) => { scr.frame(t / 1000); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "board": "SOL-MIO v1.3 (Muscle_MB2)",
+  "units": "mm, Altium board frame, origin bottom left, y up",
+  "section": "power stage",
+  "prefit": [
+    { "ref": "U1", "part": "7805 regulator", "package": "TO-220", "at": [78.2, 81.3], "rot": 0 },
+    { "ref": "J2", "part": "DC jack PJ-102A", "package": "THT", "at": [92.6, 93.5], "rot": 90 }
+  ],
+  "steps": [
+    { "ref": "D2", "cup": "A1", "part": "Schottky diode", "value": "B5819WS 1 A 40 V", "package": "SOD-323", "at": [82.0, 90.9], "rot": 90,
+      "pads": [[82.0, 92.15], [82.0, 89.65]], "polarity": "Band goes to the lower pad, toward the 7805." },
+    { "ref": "R1", "cup": "A2", "part": "Power-LED resistor", "value": "TODO from BOM", "package": "0603", "at": [87.6, 83.6], "rot": 0,
+      "pads": [[86.85, 83.6], [88.35, 83.6]], "polarity": null },
+    { "ref": "D1", "cup": "A3", "part": "Power LED", "value": "TODO colour", "package": "1206", "at": [93.1, 83.6], "rot": 0,
+      "pads": [[91.6, 83.6], [94.6, 83.6]], "polarity": "Match the cathode mark to the silkscreen." },
+    { "ref": "C4", "cup": "B1", "part": "Electrolytic capacitor", "value": "470 µF 25 V", "package": "V-chip 8x10", "at": [74.7, 93.1], "rot": 90,
+      "pads": [[74.7, 96.5], [74.7, 89.7]], "polarity": "The black stripe is minus. Match it to the silkscreen." },
+    { "ref": "C13", "cup": "B2", "part": "Electrolytic capacitor", "value": "330 µF 25 V", "package": "V-chip 8x10", "at": [55.8, 93.1], "rot": 90,
+      "pads": [[55.8, 96.5], [55.8, 89.7]], "polarity": "The black stripe is minus. Match it to the silkscreen." }
+  ]
+}

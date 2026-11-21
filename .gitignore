@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# runtime state
+screen/bench-screen/guide_state.json
+*.tmp
+station_data/
+
+# Node and tools
+node_modules/
+
+# OS and local tool state
+.DS_Store
+.omc/

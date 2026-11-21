@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Third Hand</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: a workbench stage (3D) beside an operator's console; the console stacks under the stage on phones. */
+  :root {
+    --bg: #0d1217;        /* room */
+    --panel: #121920;     /* console */
+    --raise: #18212a;
+    --line: #23303b;
+    --fg: #e4e9ee;
+    --muted: #8796a3;
+    --copper: #dd8d4e;    /* accent: copper / solder */
+    --mask: #4fb878;      /* solder-mask green: done / ok */
+    --warn: #e7b65a;
+    --bad: #e2675f;
+    --tool: #86bce8;
+    --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 390px; height: 100%; min-height: 560px; }
+  .stage { position: relative; min-width: 0; overflow: hidden; background: var(--bg); }
+  #c { display: block; width: 100%; height: 100%; touch-action: none; }
+  .panel { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; display: flex; flex-direction: column; gap: 18px;
+           padding-block: 18px 22px; padding-left: 18px; padding-right: max(18px, env(safe-area-inset-right, 0px)); min-width: 0; }
+  @media (max-width: 900px) {
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: 58vh auto; height: auto; }
+    .stage { height: 58vh; }
+    .panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible;
+             padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  }
+
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  h2 { font-size: 11px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 4px 0 0; max-width: 60ch; }
+  .headrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .lang { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex: none; }
+  .lang button { background: none; border: 0; color: var(--muted); font: 500 12px var(--mono); padding: 4px 8px; cursor: pointer; }
+  .lang button[aria-pressed="true"] { background: var(--raise); color: var(--fg); }
+
+  .status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill { font: 500 12px var(--mono); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.run { color: var(--copper); border-color: color-mix(in srgb, var(--copper) 45%, transparent); }
+  .pill.done { color: var(--mask); border-color: color-mix(in srgb, var(--mask) 45%, transparent); }
+  .pill.pause { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .meta { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button.btn { font: 500 13px var(--font); color: var(--fg); background: var(--raise); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+  button.btn:hover { border-color: #33434f; }
+  button.btn.primary { background: var(--copper); border-color: var(--copper); color: #1a1008; }
+  button.btn.primary:hover { filter: brightness(1.07); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { background: none; border: 0; border-right: 1px solid var(--line); color: var(--muted); font: 500 12px var(--mono); padding: 7px 9px; cursor: pointer; }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--raise); color: var(--fg); }
+  label.check { display: flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; font-size: 13px; }
+  label.check input { accent-color: var(--copper); width: 15px; height: 15px; }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .steps li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: 0; }
+  .steps li.active { background: color-mix(in srgb, var(--copper) 9%, transparent); }
+  .ref { font: 500 13px var(--mono); color: var(--fg); }
+  .part { min-width: 0; }
+  .part b { display: block; font-weight: 500; }
+  .part span { font: 12px var(--mono); color: var(--muted); }
+  .chip { font: 500 11px var(--mono); padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.active { color: var(--copper); border-color: color-mix(in srgb, var(--copper) 50%, transparent); }
+  .chip.ok { color: var(--mask); border-color: color-mix(in srgb, var(--mask) 45%, transparent); }
+  .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+  .formula { font: 12px var(--mono); color: var(--muted); margin: 8px 0 0; }
+
+  .log { display: flex; flex-direction: column; gap: 6px; max-height: 330px; overflow-y: auto; padding-right: 4px; }
+  @media (max-width: 900px) { .log { max-height: 280px; } }
+  .entry { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+  .who { font: 500 11px var(--mono); letter-spacing: 0.04em; color: var(--muted); padding-top: 2px; }
+  .entry.you .who { color: var(--fg); }
+  .entry.claude .who { color: var(--copper); }
+  .entry.tool .who, .entry.res .who { color: var(--tool); }
+  .entry .txt { min-width: 0; overflow-wrap: anywhere; }
+  .entry.tool .txt, .entry.res .txt { font: 12.5px var(--mono); color: var(--tool); }
+  .entry.res .txt { color: var(--muted); }
+  .entry.res .txt .ok { color: var(--mask); }
+  .entry.res .txt .bad { color: var(--bad); }
+  .entry.res .txt .warn { color: var(--warn); }
+  .entry.act .txt { color: var(--muted); font-style: italic; }
+
+  .screenwrap canvas { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); }
+  details.teach { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  details.teach summary { cursor: pointer; font-weight: 500; }
+  details.teach ol { margin: 10px 0 2px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
+  details.teach ol b { color: var(--fg); font-weight: 500; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: auto; }
+  .foot a { color: var(--muted); }
+  code { font-family: var(--mono); font-size: 12px; }
+
+  /* overlays on the stage */
+  .caption { position: absolute; top: 14px; left: max(14px, env(safe-area-inset-left, 0px)); max-width: min(440px, 58%);
+             background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; pointer-events: none; }
+  .caption .who { display: block; margin-bottom: 2px; }
+  .caption.claude .who { color: var(--copper); }
+  .caption[hidden] { display: none !important; }
+  .tele { position: absolute; top: 14px; right: 14px; width: 188px; background: color-mix(in srgb, var(--panel) 86%, transparent);
+          border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; font: 11px var(--mono); color: var(--muted); pointer-events: none; }
+  .tele .hd { display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .tele .j { display: grid; grid-template-columns: 74px 1fr 34px; gap: 6px; align-items: center; line-height: 1.6; font-variant-numeric: tabular-nums; }
+  .tele .bar { height: 4px; background: var(--line); border-radius: 2px; position: relative; overflow: hidden; }
+  .tele .bar i { position: absolute; inset: 0 auto 0 0; background: var(--copper); border-radius: 2px; }
+  .tele .v { text-align: right; color: var(--fg); }
+  @media (max-width: 620px) { .tele { display: none; } .caption { max-width: calc(100% - 28px); } #pipQueue { display: none; } }
+  .pip { position: absolute; left: 12px; bottom: 12px; border: 1px solid #3a4956; border-radius: 6px; pointer-events: none; overflow: hidden; }
+  .pip .lab { position: absolute; left: 0; top: 0; right: 0; display: flex; justify-content: space-between; padding: 4px 7px; font: 10.5px var(--mono); color: #dfe6ec;
+              background: linear-gradient(rgba(5, 8, 11, 0.75), rgba(5, 8, 11, 0)); }
+  .pip .rec::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 5px; vertical-align: 1px; animation: blink 1.2s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.2; } }
+  .det { position: absolute; border: 1.5px solid var(--mask); border-radius: 3px; }
+  .det span { position: absolute; left: -1.5px; top: -18px; font: 10.5px var(--mono); padding: 1px 5px; background: var(--mask); color: #08130c; white-space: nowrap; border-radius: 3px 3px 3px 0; }
+  .det.bad { border-color: var(--bad); } .det.bad span { background: var(--bad); color: #1a0705; }
+  .det.warn { border-color: var(--warn); } .det.warn span { background: var(--warn); color: #1a1205; }
+  .hint { position: absolute; right: 14px; bottom: 12px; font: 11px var(--mono); color: var(--muted); pointer-events: none; }
+  @media (max-width: 620px) { .hint { display: none; } }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 13px var(--mono); background: var(--bg); }
+  .loading[hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { .pip .rec::before { animation: none; } }
+</style>
+
+<div class="app">
+  <main class="stage" id="stage">
+    <canvas id="c" aria-label="3D view of the ElRobot arm on a soldering bench"></canvas>
+    <div class="caption" id="caption" hidden><span class="who" id="capWho"></span><span id="capTxt"></span></div>
+    <div class="tele" id="tele"><div class="hd"><span>st3215/inference</span><span id="teleHz">20 Hz</span></div><div id="teleRows"></div></div>
+    <div class="pip" id="pip"><div class="lab"><span class="rec" id="pipName">SIDE CAM</span><span id="pipQueue">usbvideo/3f9a…</span></div><div class="det" id="det" hidden><span id="detTxt"></span></div></div>
+    <div class="hint" data-i18n="hint">drag to orbit · scroll to zoom</div>
+    <div class="loading" id="loading">Loading ElRobot model…</div>
+  </main>
+
+  <aside class="panel">
+    <header>
+      <div class="headrow">
+        <h1>Third Hand</h1>
+        <div class="lang" role="group" aria-label="Language"><button id="lang-en" aria-pressed="true">EN</button><button id="lang-tr" aria-pressed="false">TR</button></div>
+      </div>
+      <p class="sub" data-i18n="sub"></p>
+    </header>
+
+    <div class="status"><span class="pill" id="pill">idle</span><span class="meta" id="stepMeta">0 / 5</span><span class="meta" id="clock">t = 0.0 s</span></div>
+
+    <section class="controls">
+      <div class="row">
+        <button class="btn primary" id="run" data-i18n="run">Run demo</button>
+        <button class="btn" id="pause" data-i18n="pause">Pause</button>
+        <button class="btn" id="reset" data-i18n="reset">Reset</button>
+      </div>
+      <div class="row">
+        <span class="meta" data-i18n="viewL">View</span>
+        <div class="seg" role="group" aria-label="View" id="viewSeg">
+          <button data-v="bench" aria-pressed="true" data-i18n="vBench">Bench</button><button data-v="board" aria-pressed="false" data-i18n="vBoard">Board</button><button data-v="robot" aria-pressed="false" data-i18n="vRobot">Robot</button><button data-v="screen" aria-pressed="false" data-i18n="vScreen">Screen</button>
+        </div>
+      </div>
+      <div class="row">
+        <span class="meta" data-i18n="speed">Speed</span>
+        <div class="seg" role="group" aria-label="Speed" id="speedSeg">
+          <button data-s="0.5" aria-pressed="false">0.5×</button><button data-s="1" aria-pressed="true">1×</button><button data-s="2" aria-pressed="false">2×</button><button data-s="4" aria-pressed="false">4×</button>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="miss" checked> <span data-i18n="miss"></span></label>
+      <label class="check"><input type="checkbox" id="poses"> <span data-i18n="poses">Show taught poses</span></label>
+    </section>
+
+    <section>
+      <h2 data-i18n="screenH">Bench screen</h2>
+      <div class="screenwrap" id="screenWrap"></div>
+    </section>
+
+    <section>
+      <h2 data-i18n="seq"></h2>
+      <ol class="steps" id="steps"></ol>
+      <p class="formula">12 V → J2 → D2 → VIN (C4, C13) → U1 7805 → 5 V → R1 → D1</p>
+      <p class="formula" data-i18n="prefit"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="log">Voice and tool calls</h2>
+      <div class="log" id="log" aria-live="polite"></div>
+    </section>
+
+    <details class="teach" id="teach" open>
+      <summary data-i18n="teachH">How the robot learns this (no model training)</summary>
+      <ol id="teachList"></ol>
+    </details>
+
+    <p class="foot" data-i18n-html="foot">Robot: ElRobot follower URDF and meshes from <a href="https://github.com/norma-core/norma-core" target="_blank" rel="noopener">norma-core</a>, posed with IK on its real joint chain and limits. Board: SOL-MIO v1.3 outline and part positions from its Altium project (Muscle_MB2). Bench, parts and timings simulate the planned demo.</p>
+  </aside>
+</div>
+
+<script src="elrobot-model.js"></script>
+<script src="solmio-board.js"></script>
+<script src="bench-screen.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { buildRobot, Arm, LAYOUT, PARTS, PREFIT, JOINTS } from './core.js';
+
+THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const $ = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------------------ text */
+const T = {
+  en: {
+    sub: "A voice-driven soldering assistant on NormaCore's ElRobot, populating the power stage of a fresh SOL-MIO v1.3 board. Claude sees through the cameras, fetches each part, lights up its footprint on the bench screen and checks your joints. You hold the iron.",
+    prefit: 'Fitted beforehand: U1 (7805) and J2 (DC jack). Through-hole parts are soldered from the underside.',
+    run: 'Run demo', pause: 'Pause', resume: 'Resume', reset: 'Reset', speed: 'Speed', viewL: 'View', vBench: 'Bench', vBoard: 'Board', vRobot: 'Robot', vScreen: 'Screen', screenH: 'Bench screen',
+    miss: 'Miss the grip once (step 2) to show self-correction', poses: 'Show taught poses',
+    seq: 'Build sequence · SOL-MIO v1.3 power stage', log: 'Voice and tool calls', hint: 'drag to orbit · scroll to zoom',
+    teachH: 'How the robot learns this (no model training)',
+    foot: 'Robot: ElRobot follower URDF and meshes from <a href="https://github.com/norma-core/norma-core" target="_blank" rel="noopener">norma-core</a>, posed with IK on its real joint chain and limits. Board: SOL-MIO v1.3 outline and part positions from its Altium project (Muscle_MB2). Bench, parts and timings simulate the planned demo.',
+    idle: 'idle', running: 'running', paused: 'paused', done: 'done', loading: 'Loading ElRobot model…',
+    st: { wait: 'waiting', fetch: 'fetching', point: 'on screen', place: 'placing', solder: 'soldering', soldered: 'soldered', cold: 'cold joint', ok: 'checked' },
+    you: 'YOU', claude: 'CLAUDE', tool: 'TOOL', res: 'RESULT', act: 'BENCH',
+    teach: [
+      '<b>Calibrate once.</b> Station → Auto Calibrate maps every servo to its 0–1 range (<code>position_norm</code>).',
+      '<b>Teach poses by hand.</b> Torque off, move the arm with the leader arm or by hand, call <code>save_pose("A2")</code>. Home, park, five cup slots, handover, inspect: about 30 minutes.',
+      '<b>Point with the screen, not the jaws.</b> The gripper is far wider than a 0603 or 1206 part, so Claude lights up each footprint on a bench screen drawn from the Altium data. The arm then needs no grid, just these ten or so poses.',
+      '<b>Give Claude the job, not the motions.</b> Bill of materials, cup map and rules go in CLAUDE.md. Tools: <code>fetch_part</code>, <code>show_footprint</code>, <code>look</code>, <code>inspect</code>, <code>mark_joint</code>, <code>speak</code>. Each tool runs a whole taught motion.',
+      '<b>Rehearse.</b> Run every tool 10×, fix offsets, and keep the self-check: after each fetch Claude looks with the side camera and retries if the cup is not there.',
+    ],
+    parts: { D2: 'Schottky diode B5819WS', R1: 'LED resistor, 0603', D1: 'Power LED, 1206', C4: '470 µF 25 V capacitor', C13: '330 µF 25 V capacitor' },
+    cup: 'cup',
+  },
+  tr: {
+    sub: "NormaCore ElRobot üzerinde sesle çalışan lehim asistanı, yeni bir SOL-MIO v1.3 kartının güç bölümünü diziyor. Claude kameralardan bakar, her parçayı getirir, yerini masa ekranında aydınlatır ve lehimini kontrol eder. Havya sende.",
+    prefit: 'Önceden takılı: U1 (7805) ve J2 (DC jak). Delikli (THT) parçalar alttan lehimlenir.',
+    run: 'Demoyu oynat', pause: 'Duraklat', resume: 'Devam', reset: 'Sıfırla', speed: 'Hız', viewL: 'Görünüm', vBench: 'Masa', vBoard: 'Kart', vRobot: 'Robot', vScreen: 'Ekran', screenH: 'Masa ekranı',
+    miss: 'Kendini düzeltmeyi göstermek için 2. adımda kavramayı bir kez kaçır', poses: 'Öğretilen pozları göster',
+    seq: 'Montaj sırası · SOL-MIO v1.3 güç bölümü', log: 'Ses ve araç çağrıları', hint: 'sürükle: döndür · tekerlek: yakınlaş',
+    teachH: 'Robot bunu nasıl öğreniyor (model eğitimi yok)',
+    foot: 'Robot: ElRobot follower URDF ve mesh dosyaları <a href="https://github.com/norma-core/norma-core" target="_blank" rel="noopener">norma-core</a> reposundan; gerçek eklem zinciri ve limitleriyle IK ile hareket ettiriliyor. Kart: SOL-MIO v1.3 dış hatları ve parça yerleri Altium projesinden (Muscle_MB2). Masa, parçalar ve süreler planlanan demonun simülasyonu.',
+    idle: 'bekliyor', running: 'çalışıyor', paused: 'duraklatıldı', done: 'bitti', loading: 'ElRobot modeli yükleniyor…',
+    st: { wait: 'sırada', fetch: 'getiriliyor', point: 'ekranda', place: 'takılıyor', solder: 'lehimleniyor', soldered: 'lehimlendi', cold: 'soğuk lehim', ok: 'kontrol edildi' },
+    you: 'SEN', claude: 'CLAUDE', tool: 'ARAÇ', res: 'SONUÇ', act: 'MASA',
+    teach: [
+      '<b>Bir kez kalibre et.</b> Station → Auto Calibrate her servoyu 0–1 aralığına eşler (<code>position_norm</code>).',
+      '<b>Pozları elle öğret.</b> Torku kapat, kolu leader kolla ya da elle götür, <code>save_pose("A2")</code> de. Başlangıç, park, 5 kap, teslim alanı, kontrol pozu: yaklaşık 30 dakika.',
+      '<b>Gripper\'la değil ekranla göster.</b> Çeneler 0603 ve 1206 parçalardan çok daha geniş; Claude her footprint\'i Altium verisinden çizilen masa ekranında aydınlatır. Kola ızgara öğretmek gerekmez, bu on kadar poz yeter.',
+      '<b>Claude\'a hareketleri değil işi ver.</b> Malzeme listesi, kap haritası ve kurallar CLAUDE.md\'de. Araçlar: <code>fetch_part</code>, <code>show_footprint</code>, <code>look</code>, <code>inspect</code>, <code>mark_joint</code>, <code>speak</code>. Her araç öğretilmiş bir hareketi baştan sona yapar.',
+      '<b>Prova et.</b> Her aracı 10 kez çalıştır, sapmaları düzelt. Kendini kontrol etsin: her getirmeden sonra Claude yan kameradan bakar, kap yoksa tekrar dener.',
+    ],
+    parts: { D2: 'Schottky diyot B5819WS', R1: 'LED direnci, 0603', D1: 'Güç LED\'i, 1206', C4: '470 µF 25 V kondansatör', C13: '330 µF 25 V kondansatör' },
+    cup: 'kap',
+  },
+};
+let lang = 'en';
+const t = (k) => T[lang][k] ?? T.en[k];
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach((el) => { el.innerHTML = t(el.dataset.i18nHtml); });
+  $('teachList').innerHTML = t('teach').map((s) => `<li>${s}</li>`).join('');
+  $('lang-en').setAttribute('aria-pressed', lang === 'en'); $('lang-tr').setAttribute('aria-pressed', lang === 'tr');
+  $('pause').textContent = paused ? t('resume') : t('pause');
+  renderSteps(); setPill(status);
+  try { localStorage.setItem('thirdhand-lang', lang); } catch (e) { /* storage unavailable */ }
+}
+
+/* ------------------------------------------------------------------ renderer + scene */
+const stage = $('stage'), canvas = $('c');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (e) {
+  $('loading').textContent = 'WebGL is not available in this browser, so the 3D bench cannot be shown.';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0d1217');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 20);
+const VIEWS = {
+  bench: { pos: V(-0.34, 0.7, 0.44), target: V(0.03, 0.18, 0.07) },
+  board: { pos: V(0.095, 0.25, 0.125), target: V(0.003, 0.152, 0.03) },
+  robot: { pos: V(0.42, 0.42, 0.34), target: V(-0.01, 0.1, 0.12) },
+};
+const CAM_HOME = VIEWS.bench;
+let camGoal = null;
+camera.position.copy(CAM_HOME.pos);
+const controls = new OrbitControls(camera, canvas);
+controls.target.copy(CAM_HOME.target);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 0.18; controls.maxDistance = 2.2; controls.maxPolarAngle = Math.PI * 0.49;
+
+const key = new THREE.DirectionalLight(0xfff0dc, 2.4);
+key.position.set(-0.35, 0.55, 1.1); key.target.position.set(0.02, 0.17, 0);
+key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -0.55, right: 0.55, top: 0.55, bottom: -0.55, near: 0.2, far: 3 });
+key.shadow.bias = -0.0003; key.shadow.normalBias = 0.0015;
+scene.add(key, key.target);
+scene.add(new THREE.HemisphereLight(0xbfd3ea, 0x241a12, 0.55));
+const rim = new THREE.DirectionalLight(0x9cc3ff, 0.6); rim.position.set(0.6, -0.5, 0.6); scene.add(rim);
+
+/* ------------------------------------------------------------------ textures */
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8;
+  return tx;
+}
+const matStd = (color, rough = 0.6, metal = 0, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, ...extra });
+function mesh(geo, mat, cast = true, recv = true) { const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = recv; return m; }
+
+/* ------------------------------------------------------------------ bench */
+const bench = new THREE.Group(); scene.add(bench);
+const table = mesh(new THREE.BoxGeometry(1.5, 1.0, 0.04), matStd('#5b4a3b', 0.78), false, true);
+table.position.set(0.05, 0.2, -0.0205); bench.add(table);
+const floorish = mesh(new THREE.PlaneGeometry(8, 8), matStd('#0b0f13', 1), false, false); floorish.position.z = -0.75; bench.add(floorish);
+
+const matTex = canvasTex(1024, 712, (g, w, h) => {
+  g.fillStyle = '#34495a'; g.fillRect(0, 0, w, h);
+  const px = w / 720; // px per mm
+  g.strokeStyle = 'rgba(255,255,255,0.055)'; g.lineWidth = 1;
+  for (let x = 0; x <= 720; x += 10) { g.beginPath(); g.moveTo(x * px, 0); g.lineTo(x * px, h); g.stroke(); }
+  for (let y = 0; y <= 500; y += 10) { g.beginPath(); g.moveTo(0, y * px); g.lineTo(w, y * px); g.stroke(); }
+  g.strokeStyle = 'rgba(255,255,255,0.12)';
+  for (let x = 0; x <= 720; x += 50) { g.beginPath(); g.moveTo(x * px, 0); g.lineTo(x * px, h); g.stroke(); }
+  for (let y = 0; y <= 500; y += 50) { g.beginPath(); g.moveTo(0, y * px); g.lineTo(w, y * px); g.stroke(); }
+  g.fillStyle = 'rgba(235,240,245,0.42)'; g.font = '500 11px "IBM Plex Mono", monospace';
+  g.fillText('ESD SAFE WORK SURFACE · 10⁷–10⁹ Ω', 20, h - 16);
+});
+const esd = mesh(new THREE.PlaneGeometry(0.72, 0.5), matStd('#ffffff', 0.92, 0, { map: matTex }), false, true);
+esd.position.set(0.03, 0.18, 0.0006); esd.rotation.z = Math.PI; bench.add(esd);
+const snap = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.004, 24), matStd('#c9ced3', 0.3, 1)); snap.rotation.x = Math.PI / 2; snap.position.set(-0.3, -0.04, 0.002); bench.add(snap);
+
+/* robot base clamp plate */
+const plate = mesh(new THREE.BoxGeometry(0.11, 0.1, 0.004), matStd('#2a2f35', 0.5, 0.6)); plate.position.set(0, 0.01, -0.0015); bench.add(plate);
+
+/* ------------------------------------------------------------------ robot */
+const PLA = new THREE.MeshStandardMaterial({ color: '#bfc6cd', roughness: 0.66, metalness: 0, flatShading: true });
+const PLA_DARK = new THREE.MeshStandardMaterial({ color: '#aab3bc', roughness: 0.6, metalness: 0, flatShading: true });
+const SERVO = new THREE.MeshStandardMaterial({ color: '#17191c', roughness: 0.42, metalness: 0.15, flatShading: true });
+const robot = buildRobot(window.ELROBOT, (link, mat) => {
+  if (link.startsWith('ST3215')) return SERVO;
+  if (link.startsWith('Gripper_Jaw') || link === 'Gripper_Gear_v1_1') return PLA_DARK;
+  return PLA;
+});
+bench.add(robot.root);
+bench.updateMatrixWorld(true);
+const arm = new Arm(robot);
+const GB = robot.links['Gripper_Base_v1_1'];
+
+/* wrist camera (UVC module on the gripper) */
+const wristCamBody = new THREE.Group();
+wristCamBody.add(mesh(new THREE.BoxGeometry(0.026, 0.009, 0.022), matStd('#1c2228', 0.5, 0.2)));
+const lens = mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.004, 20), matStd('#0b0d10', 0.15, 0.6));
+lens.position.y = 0.006; wristCamBody.add(lens);
+const camLocalPos = V(0, 0.032, 0.03);
+const camLocalLook = arm.tipLocal.clone().addScaledVector(arm.axisLocal, 0.05);
+wristCamBody.position.copy(camLocalPos);
+wristCamBody.quaternion.setFromUnitVectors(V(0, 1, 0), camLocalLook.clone().sub(camLocalPos).normalize());
+GB.add(wristCamBody);
+const wristCam = new THREE.PerspectiveCamera(72, 4 / 3, 0.004, 3);
+wristCam.position.copy(camLocalPos).addScaledVector(camLocalLook.clone().sub(camLocalPos).normalize(), 0.011); // just in front of the lens
+wristCam.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(camLocalPos, camLocalLook, V(0, 0, 1)));
+GB.add(wristCam);
+
+/* side camera on a small tripod */
+const sideCam = new THREE.PerspectiveCamera(48, 4 / 3, 0.01, 4);
+sideCam.position.fromArray(LAYOUT.sideCam.pos); sideCam.lookAt(V(...LAYOUT.sideCam.look));
+{
+  const g = new THREE.Group(); const p = LAYOUT.sideCam.pos;
+  const legM = matStd('#2b3036', 0.5, 0.5);
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.094 + 0.4, foot = V(p[0] + Math.cos(a) * 0.07, p[1] + Math.sin(a) * 0.07, 0);
+    const top = V(p[0], p[1], p[2] - 0.03), dir = top.clone().sub(foot);
+    const leg = mesh(new THREE.CylinderGeometry(0.0025, 0.003, dir.length(), 8), legM);
+    leg.position.copy(foot).addScaledVector(dir, 0.5); leg.quaternion.setFromUnitVectors(V(0, 1, 0), dir.normalize()); g.add(leg);
+  }
+  const body = new THREE.Group();
+  body.add(mesh(new THREE.BoxGeometry(0.07, 0.03, 0.03), matStd('#1b1f24', 0.45, 0.2)));
+  const l = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 24), matStd('#0a0c0e', 0.12, 0.7)); l.rotation.x = Math.PI / 2; l.position.z = 0.019; body.add(l);
+  // the body sits just behind the virtual camera; the lens on its +Z face is turned to look where the camera looks
+  body.position.copy(sideCam.position).addScaledVector(sideCam.getWorldDirection(new THREE.Vector3()), -0.032);
+  body.quaternion.copy(sideCam.quaternion);
+  body.rotateY(Math.PI); g.add(body); bench.add(g);
+}
+
+/* ------------------------------------------------------------------ SOL-MIO v1.3 on standoffs */
+const SOL = window.SOLMIO;
+const [OX, OY] = LAYOUT.pcb.origin;
+const BT = LAYOUT.pcb.size[2];
+const pcb = new THREE.Group();
+pcb.position.fromArray(LAYOUT.pcb.center); pcb.rotation.z = Math.PI; bench.add(pcb);
+const bl = (x, y) => [(x - OX) / 1000, (y - OY) / 1000]; // board mm (Altium) -> board-local metres
+const BX0 = Math.min(...SOL.outline.map((p) => p[0])), BX1 = Math.max(...SOL.outline.map((p) => p[0]));
+const BY0 = Math.min(...SOL.outline.map((p) => p[1])), BY1 = Math.max(...SOL.outline.map((p) => p[1]));
+const KNOWN = Object.fromEntries([...PARTS, ...PREFIT].map((p) => [p.ref, p]));
+
+// copper pads for each footprint, in part-local mm (x along the part's length)
+function padsFor(p) {
+  const P = [], add = (x, y, w, h, tht = false) => P.push({ x, y, w, h, tht });
+  const L = p.L, W = p.W;
+  if (p.d === 'U1') { for (const x of [-2.54, 0, 2.54]) add(x, 0, 1.9, 2.4, true); return P; }
+  if (p.d === 'J2') { add(0, 3.2, 3.2, 1.6, true); add(0, -2.8, 3.2, 1.6, true); add(-4.0, 0.2, 1.6, 3.2, true); return P; }
+  if (KNOWN[p.d]) {
+    const q = KNOWN[p.d], a = -(q.a || 0) * Math.PI / 180;
+    for (const [x, y] of q.pads) {
+      const dx = x - p.x, dy = y - p.y;
+      add(dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a), q.kind === 'vchip' ? 3.0 : L * 0.4, q.kind === 'vchip' ? 2.0 : W * 1.05);
+    }
+    return P;
+  }
+  if (p.k === 'qfp') { for (let s = 0; s < 4; s++) for (let i = 0; i < 25; i++) { const t = -6 + i * 0.5, e = 7.6; const [x, y] = [[t, -e], [e, t], [-t, e], [-e, -t]][s]; add(x, y, s % 2 ? 1.4 : 0.28, s % 2 ? 0.28 : 1.4); } return P; }
+  if (p.k === 'hdr') { const n = Math.round(L / 2.54); for (let i = 0; i < n; i++) add(-L / 2 + 1.27 + i * 2.54, 0, 1.7, 1.7, true); return P; }
+  if (p.k === 'cyl') { add(-3.4, 0, 3.0, 2.0); add(3.4, 0, 3.0, 2.0); return P; }
+  if (L === 7.4) { add(-1.25, -0.6, 1.8, 1.8, true); add(1.25, -0.6, 1.8, 1.8, true); return P; } // JST XH, 2 pins
+  if (p.d === 'P7') { for (const x of [-2.5, 0, 2.5]) add(x, -0.5, 1.8, 1.8, true); return P; }
+  if (p.d === 'J8') { for (const x of [-2.54, 0, 2.54]) for (const y of [-1.27, 1.27]) add(x, y, 1.6, 1.6, true); return P; }
+  if (p.d === 'J15') { for (let i = 0; i < 4; i++) add(-3 + i * 2, 0, 1.4, 1.4, true); return P; }
+  if (p.d === 'Y1') { add(-2.44, 0, 1.6, 1.6, true); add(2.44, 0, 1.6, 1.6, true); return P; }
+  if (p.d === 'U3') { for (let i = 0; i < 15; i++) add(-8.89 + i * 1.27, i % 2 ? 1.0 : -1.0, 1.1, 1.6, true); return P; }
+  if (p.d === 'SW1') { for (const x of [-2.6, 2.6]) for (const y of [-1.3, 1.3]) add(x, y, 1.0, 0.9); return P; }
+  if (p.d === 'D4') { for (const x of [-2.2, 2.2]) for (const y of [-1.6, 0, 1.6]) add(x, y, 1.1, 0.8); return P; }
+  add(-L / 2 + L * 0.18, 0, L * 0.38, W * 1.05); add(L / 2 - L * 0.18, 0, L * 0.38, W * 1.05);
+  return P;
+}
+
+const S = 14; // texture px per mm
+const boardTex = canvasTex(Math.ceil((BX1 - BX0) * S), Math.ceil((BY1 - BY0) * S), (g, w, h) => {
+  const X = (x) => (x - BX0) * S, Y = (y) => (BY1 - y) * S;
+  g.fillStyle = '#ecede7'; g.fillRect(0, 0, w, h); // white solder mask
+  const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, 'rgba(255,255,255,0.4)'); gr.addColorStop(1, 'rgba(120,115,95,0.08)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(150,140,105,0.07)'; g.fillRect(X(52), Y(99), 44 * S, 24 * S); // copper pour showing through the mask
+  const onPart = (p, fn) => { g.save(); g.translate(X(p.x), Y(p.y)); g.rotate(-(p.a || 0) * Math.PI / 180); fn(); g.restore(); };
+  for (const p of SOL.parts) onPart(p, () => {
+    for (const q of padsFor(p)) {
+      if (p.b && !q.tht) continue; // SMD parts on the underside
+      g.fillStyle = '#c3c7cb';
+      if (q.tht) { g.beginPath(); g.ellipse(q.x * S, -q.y * S, q.w / 2 * S, q.h / 2 * S, 0, 0, 7); g.fill(); g.fillStyle = '#4a4a46'; g.beginPath(); g.arc(q.x * S, -q.y * S, 0.45 * S, 0, 7); g.fill(); }
+      else g.fillRect((q.x - q.w / 2) * S, (-q.y - q.h / 2) * S, q.w * S, q.h * S);
+    }
+  });
+  g.strokeStyle = '#1e1e1c'; g.fillStyle = '#1e1e1c'; g.lineWidth = 0.16 * S;
+  for (const p of SOL.parts) if (!p.b) onPart(p, () => {
+    const L = (p.L + 0.7) * S, W = (p.W + 0.7) * S;
+    g.strokeRect(-L / 2, -W / 2, L, W);
+    if (p.k === 'cyl') { g.beginPath(); g.moveTo(-L / 2, W / 4); g.lineTo(-L / 4, W / 2); g.stroke(); }
+    if (p.d === 'D2') g.fillRect(-L / 2, -W / 2, 0.4 * S, W);
+  });
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const p of SOL.parts) if (!p.b) {
+    const big = p.L > 4 || p.W > 4, side = (Math.round(p.a || 0) % 180 === 90 ? p.L : p.W) / 2;
+    g.font = `600 ${(big ? 1.5 : 1.1) * S}px "IBM Plex Mono", monospace`;
+    g.fillText(p.d, X(p.x), Y(p.y + side + (big ? 1.5 : 1.1)));
+  }
+  g.textAlign = 'left';
+  g.font = `700 ${3.4 * S}px "IBM Plex Sans", sans-serif`; g.fillText('SOL-MIO v1.3', X(22), Y(56));
+  g.font = `500 ${1.6 * S}px "IBM Plex Mono", monospace`; g.fillText('Muscle_MB2 · LOKMAN', X(22), Y(51.5));
+  g.fillText('12V IN', X(84), Y(99.2)); g.fillText('PWR', X(91.4), Y(80.6));
+  for (const [x, y, d] of SOL.holes) { g.fillStyle = '#c3c7cb'; g.beginPath(); g.arc(X(x), Y(y), (d / 2 + 0.9) * S, 0, 7); g.fill(); }
+});
+{
+  const shape = new THREE.Shape(SOL.outline.map(([x, y]) => new THREE.Vector2(...bl(x, y))));
+  for (const [x, y, d] of SOL.holes) { const hp = new THREE.Path(); const [hx, hy] = bl(x, y); hp.absarc(hx, hy, d / 2000, 0, Math.PI * 2, true); shape.holes.push(hp); }
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: BT, bevelEnabled: false, curveSegments: 18 });
+  const wM = (BX1 - BX0) / 1000, hM = (BY1 - BY0) / 1000;
+  boardTex.repeat.set(1 / wM, 1 / hM); boardTex.offset.set(-((BX0 - OX) / 1000) / wM, -((BY0 - OY) / 1000) / hM);
+  pcb.add(mesh(geo, [matStd('#ffffff', 0.48, 0, { map: boardTex }), matStd('#d8d0b2', 0.85)]));
+  // fixture plate and brass standoffs under the mounting holes
+  const z0 = -LAYOUT.pcb.center[2];
+  const [cxL, cyL] = bl((BX0 + BX1) / 2, (BY0 + BY1) / 2);
+  const plate = mesh(new THREE.BoxGeometry(wM + 0.012, hM + 0.012, 0.004), matStd('#3a4149', 0.4, 0.7)); plate.position.set(cxL, cyL, z0 + 0.002); pcb.add(plate);
+  const brass = matStd('#c7a052', 0.3, 1), screw = matStd('#d5d9dd', 0.3, 1), hgt = LAYOUT.pcb.center[2] - 0.004;
+  for (const [x, y, d] of SOL.holes) if (d > 3) {
+    const [hx, hy] = bl(x, y);
+    const st = mesh(new THREE.CylinderGeometry(0.0028, 0.0028, hgt, 6), brass); st.rotation.x = Math.PI / 2; st.position.set(hx, hy, -hgt / 2); pcb.add(st);
+    const head = mesh(new THREE.CylinderGeometry(0.0026, 0.0026, 0.0013, 20), screw); head.rotation.x = Math.PI / 2; head.position.set(hx, hy, BT + 0.00065); pcb.add(head);
+  }
+}
+// 12 V adapter plug, shown at the end
+const adapter = new THREE.Group();
+{
+  const [jx, jy] = bl(92.6, 100.9), zc = BT + 0.0065;
+  const plug = mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.014, 24), matStd('#151618', 0.5)); plug.position.set(jx, jy + 0.007, zc); adapter.add(plug);
+  const boot = mesh(new THREE.CylinderGeometry(0.003, 0.0042, 0.012, 20), matStd('#151618', 0.6)); boot.position.set(jx, jy + 0.02, zc); adapter.add(boot);
+  const cable = new THREE.CatmullRomCurve3([V(jx, jy + 0.025, zc), V(jx, jy + 0.035, zc - 0.002), V(jx - 0.002, jy + 0.05, -0.012), V(jx - 0.008, jy + 0.064, -0.0235), V(jx - 0.05, jy + 0.1, -0.0235)], false, 'centripetal');
+  adapter.add(mesh(new THREE.TubeGeometry(cable, 30, 0.0016, 8), matStd('#151618', 0.6)));
+  adapter.visible = false; pcb.add(adapter);
+}
+// green glow from the power LED D1 (the light exists from the start so turning it on causes no shader rebuild)
+const d1Glow = new THREE.PointLight('#5dff7d', 0, 0.06, 2);
+d1Glow.position.set(...bl(93.1, 83.6), BT + 0.004); pcb.add(d1Glow);
+
+/* bench screen: a portable monitor that shows the board and lights up where the next part goes */
+const screenCanvas = document.createElement('canvas'); screenCanvas.width = 1280; screenCanvas.height = 720;
+screenCanvas.setAttribute('aria-label', 'Bench screen: the SOL-MIO board with the next footprint lit up');
+const benchScreen = BenchScreen.create(screenCanvas);
+let placedRefs = [], screenAcc = 1;
+const screenTex = new THREE.CanvasTexture(screenCanvas); screenTex.colorSpace = THREE.SRGBColorSpace; screenTex.anisotropy = 8;
+const monitor = new THREE.Group();
+{
+  const SW = 0.345, SH = 0.194;
+  monitor.add(mesh(new THREE.BoxGeometry(SW + 0.012, SH + 0.012, 0.007), matStd('#16191c', 0.45, 0.3)));
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
+  glass.position.z = 0.0037; monitor.add(glass);
+  const leg = mesh(new THREE.BoxGeometry(0.06, 0.006, 0.14), matStd('#2a2e33', 0.5, 0.5)); leg.position.set(0, -0.03, -0.06); leg.rotation.x = 0.45; monitor.add(leg);
+  monitor.position.set(-0.34, 0.15, 0.118); // robot's left, behind the tray, out of the side camera's view
+  bench.add(monitor);
+  monitor.lookAt(V(0.02, 0.62, 0.2));
+  bench.updateMatrixWorld(true);
+  const n = V(0, 0, 1).applyQuaternion(monitor.quaternion);
+  VIEWS.screen = { pos: monitor.position.clone().addScaledVector(n, 0.42).add(V(0, 0, 0.03)), target: monitor.position.clone() };
+}
+
+/* ------------------------------------------------------------------ components */
+const M = { black: matStd('#141516', 0.5), tin: matStd('#d3d6d9', 0.3, 1), alu: matStd('#cfd3d7', 0.28, 1), plastic: matStd('#1b1c1e', 0.55), band: matStd('#9aa0a6', 0.5), white: matStd('#f1f1ec', 0.45) };
+const ledMat = () => new THREE.MeshStandardMaterial({ color: '#a6e8b0', roughness: 0.15, transparent: true, opacity: 0.85, emissive: '#3dff6a', emissiveIntensity: 0 });
+const tabTex = canvasTex(256, 192, (g, w, h) => { g.fillStyle = '#141516'; g.fillRect(0, 0, w, h); g.fillStyle = '#9aa0a6'; g.font = '600 40px "IBM Plex Mono", monospace'; g.fillText('L7805CV', 26, 90); g.font = '500 26px "IBM Plex Mono", monospace'; g.fillText('ST  2326', 26, 132); });
+const mmBox = (w, d, h, mat, x = 0, y = 0, z = 0) => { const m = mesh(new THREE.BoxGeometry(w / 1000, d / 1000, h / 1000), mat); m.position.set(x / 1000, y / 1000, (z + h / 2) / 1000); return m; };
+function makePart(p) {
+  const g = new THREE.Group(), k = 0.001;
+  if (p.kind === 'sod323') {
+    g.add(mmBox(1.7, 1.25, 0.9, M.black)); g.add(mmBox(0.35, 1.27, 0.92, M.band, -0.55));
+    for (const s of [-1, 1]) g.add(mmBox(0.5, 0.35, 0.15, M.tin, s * 1.15));
+  } else if (p.kind === 'r0603') {
+    g.add(mmBox(1.0, 0.8, 0.45, M.black)); for (const s of [-1, 1]) g.add(mmBox(0.32, 0.82, 0.47, M.tin, s * 0.64));
+  } else if (p.kind === 'led1206') {
+    const m = ledMat(); g.userData.ledMat = m;
+    g.add(mmBox(3.2, 1.6, 0.45, M.white)); g.add(mmBox(2.2, 1.4, 0.4, m, 0, 0, 0.45)); for (const s of [-1, 1]) g.add(mmBox(0.45, 1.62, 0.47, M.tin, s * 1.4));
+  } else if (p.kind === 'vchip') {
+    g.add(mmBox(8.3, 8.3, 1.0, M.plastic));
+    const can = mesh(new THREE.CylinderGeometry(4 * k, 4 * k, 9.5 * k, 32), M.alu); can.rotation.x = Math.PI / 2; can.position.z = 5.75 * k; g.add(can);
+    const half = mesh(new THREE.CylinderGeometry(3.6 * k, 3.6 * k, 0.15 * k, 32, 1, false, 0, Math.PI), M.black); half.rotation.x = Math.PI / 2; half.position.z = 10.55 * k; g.add(half);
+  } else if (p.kind === 'to220') {
+    const body = mesh(new THREE.BoxGeometry(10 * k, 4.5 * k, 9 * k), [M.black, M.black, M.black, matStd('#ffffff', 0.5, 0, { map: tabTex }), M.black, M.black]); body.position.z = 7.5 * k; g.add(body);
+    g.add(mmBox(10, 1.3, 6.5, M.alu, 0, 1.6, 12));
+    const hole = mesh(new THREE.CylinderGeometry(1.8 * k, 1.8 * k, 1.4 * k, 20), M.black); hole.position.set(0, 1.6 * k, 15.5 * k); g.add(hole);
+    for (const x of [-2.54, 0, 2.54]) g.add(mmBox(0.8, 0.5, 4.5, M.tin, x, 0, -1.5));
+  } else if (p.kind === 'jack') {
+    g.add(mmBox(14.4, 9, 11, M.plastic));
+    const o = mesh(new THREE.CylinderGeometry(3.2 * k, 3.2 * k, 0.6 * k, 28), M.black); o.rotation.z = Math.PI / 2; o.position.set(7.25 * k, 0, 6.5 * k); g.add(o);
+    const pin = mesh(new THREE.CylinderGeometry(1 * k, 1 * k, 8 * k, 14), M.tin); pin.rotation.z = Math.PI / 2; pin.position.set(3.4 * k, 0, 6.5 * k); g.add(pin);
+  }
+  return g;
+}
+function placeOnBoard(p, part, lift = 0) { const [lx, ly] = bl(p.at[0], p.at[1]); part.position.set(lx, ly, BT + lift); part.rotation.z = (p.a || 0) * Math.PI / 180; pcb.add(part); return part; }
+for (const p of PREFIT) placeOnBoard(p, makePart(p));
+
+/* parts tray + cups */
+const trayTex = canvasTex(1024, 640, (g, w, h) => {
+  g.fillStyle = '#20262c'; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(230,236,241,0.75)'; g.font = '600 40px "IBM Plex Mono", monospace'; g.textAlign = 'center';
+  const c = LAYOUT.tray.center, sx = w / 0.13, sy = h / 0.08;
+  for (const [k, [x, y]] of Object.entries(LAYOUT.tray.slots)) {
+    // label sits in the gap beside each cup, turned to read from the person's side of the bench
+    g.save(); g.translate((x + 0.0198 - c[0] + 0.065) * sx, (0.04 - (y - c[1])) * sy); g.rotate(Math.PI); g.fillText(k, 0, 14); g.restore();
+  }
+});
+const tray = mesh(new THREE.BoxGeometry(0.13, 0.08, 0.006), [matStd('#1f252b', 0.6), matStd('#1f252b', 0.6), matStd('#1f252b', 0.6), matStd('#1f252b', 0.6), matStd('#ffffff', 0.6, 0, { map: trayTex }), matStd('#1f252b', 0.6)]);
+tray.position.set(LAYOUT.tray.center[0], LAYOUT.tray.center[1], 0.003); bench.add(tray);
+const cupProfile = [V(0, 0, 0), V(0.0108, 0, 0), V(0.0118, 0.0015, 0), V(LAYOUT.tray.cupR, LAYOUT.tray.cupH, 0), V(LAYOUT.tray.cupR - 0.0008, LAYOUT.tray.cupH, 0), V(0.0111, 0.0025, 0), V(0, 0.0025, 0)].map((v) => new THREE.Vector2(v.x, v.y));
+const cupGeo = new THREE.LatheGeometry(cupProfile, 40); cupGeo.rotateX(Math.PI / 2);
+const cups = {};
+function resetCups() {
+  for (const c of Object.values(cups)) c.group.removeFromParent();
+  for (const p of PARTS) {
+    const g = new THREE.Group();
+    const m = new THREE.MeshStandardMaterial({ color: '#e4e9ee', roughness: 0.32, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+    g.add(mesh(cupGeo, m));
+    const band = mesh(new THREE.CylinderGeometry(LAYOUT.tray.cupR * 0.985, LAYOUT.tray.cupR * 0.93, 0.005, 40, 1, true), matStd('#dd8d4e', 0.5, 0, { side: THREE.DoubleSide }));
+    band.rotation.x = Math.PI / 2; band.position.z = 0.02; g.add(band);
+    const content = new THREE.Group();
+    const n = ['to220', 'jack', 'vchip'].includes(p.kind) ? 1 : 6;
+    for (let i = 0; i < n; i++) {
+      const part = makePart(p);
+      part.position.set(Math.cos(i * 2.3) * 0.004, Math.sin(i * 2.3) * 0.004, 0.0035 + i * 0.0018);
+      part.rotation.set(0, 0, i * 1.3);
+      content.add(part);
+    }
+    g.add(content);
+    const [x, y] = LAYOUT.tray.slots[p.slot];
+    g.position.set(x, y, 0.0005);
+    bench.add(g);
+    cups[p.slot] = { group: g, mat: m, content, home: V(x, y, 0.0005), part: p };
+  }
+}
+resetCups();
+
+/* handover zone */
+const hoTex = canvasTex(256, 256, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  g.save(); g.beginPath(); g.rect(0, 0, w, h); g.rect(22, 22, w - 44, h - 44); g.clip('evenodd');
+  for (let i = -h; i < w + h; i += 28) { g.fillStyle = (i / 28) % 2 ? '#e7b65a' : '#16191c'; g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 14, 0); g.lineTo(i + 14 - h, h); g.lineTo(i - h, h); g.fill(); }
+  g.restore();
+  g.fillStyle = 'rgba(231,182,90,0.85)'; g.font = '600 22px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.fillText('HANDOVER', w / 2, h / 2 + 8);
+});
+const handover = mesh(new THREE.PlaneGeometry(0.062, 0.062), new THREE.MeshStandardMaterial({ map: hoTex, transparent: true, roughness: 0.8 }), false, true);
+handover.position.set(LAYOUT.handover[0], LAYOUT.handover[1], 0.0011); handover.rotation.z = Math.PI; bench.add(handover);
+
+/* soldering station + iron */
+const ironStation = new THREE.Group(); bench.add(ironStation);
+{
+  const box = mesh(new THREE.BoxGeometry(0.11, 0.09, 0.07), matStd('#25292e', 0.5, 0.35)); box.position.set(0.33, 0.43, 0.035); ironStation.add(box);
+  const dispTex = canvasTex(256, 128, (g, w, h) => { g.fillStyle = '#0a0d0f'; g.fillRect(0, 0, w, h); g.fillStyle = '#ff8a3d'; g.font = '600 64px "IBM Plex Mono", monospace'; g.fillText('350°', 30, 86); g.font = '500 22px "IBM Plex Mono", monospace'; g.fillStyle = '#7d8a94'; g.fillText('C   SET 350', 30, 116); });
+  const disp = mesh(new THREE.PlaneGeometry(0.05, 0.025), new THREE.MeshBasicMaterial({ map: dispTex })); disp.position.set(0.33, 0.476, 0.045); disp.rotation.x = Math.PI / 2; disp.rotation.y = Math.PI; ironStation.add(disp);
+  const knob = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.008, 24), matStd('#c9ced3', 0.3, 0.9)); knob.position.set(0.33, 0.479, 0.018); ironStation.add(knob);
+  const standBase = mesh(new THREE.CylinderGeometry(0.035, 0.038, 0.012, 32), matStd('#2a2e33', 0.45, 0.6)); standBase.rotation.x = Math.PI / 2; standBase.position.set(LAYOUT.ironStand[0], LAYOUT.ironStand[1], 0.006); ironStation.add(standBase);
+  const sponge = mesh(new THREE.BoxGeometry(0.03, 0.03, 0.008), matStd('#e3c24a', 0.95)); sponge.position.set(LAYOUT.ironStand[0] - 0.012, LAYOUT.ironStand[1] - 0.012, 0.014); ironStation.add(sponge);
+  const pts = []; for (let i = 0; i <= 140; i++) { const a = i * 0.32, k = i / 140; pts.push(V(Math.cos(a) * (0.007 + k * 0.007), Math.sin(a) * (0.007 + k * 0.007), k * 0.07)); }
+  const spring = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 400, 0.0009, 6), matStd('#b8bec5', 0.3, 1));
+  spring.position.set(LAYOUT.ironStand[0] + 0.01, LAYOUT.ironStand[1] + 0.012, 0.012); spring.rotation.x = -0.75; ironStation.add(spring);
+}
+const iron = new THREE.Group(); // local origin = tip, handle along +Z
+{
+  const tipM = matStd('#c4c8cc', 0.3, 1);
+  iron.userData.tipMat = new THREE.MeshStandardMaterial({ color: '#9aa0a6', roughness: 0.35, metalness: 1, emissive: '#ff6a1a', emissiveIntensity: 0 });
+  const tip = mesh(new THREE.ConeGeometry(0.0016, 0.012, 16), iron.userData.tipMat); tip.rotation.x = -Math.PI / 2; tip.position.z = 0.006; iron.add(tip);
+  const shaft = mesh(new THREE.CylinderGeometry(0.0028, 0.0028, 0.045, 16), tipM); shaft.rotation.x = Math.PI / 2; shaft.position.z = 0.0345; iron.add(shaft);
+  const guard = mesh(new THREE.CylinderGeometry(0.0075, 0.005, 0.012, 20), matStd('#3b3f44', 0.5)); guard.rotation.x = Math.PI / 2; guard.position.z = 0.062; iron.add(guard);
+  const handle = mesh(new THREE.CylinderGeometry(0.0085, 0.007, 0.095, 24), matStd('#2f6fb3', 0.55)); handle.rotation.x = Math.PI / 2; handle.position.z = 0.115; iron.add(handle);
+  for (let i = 0; i < 5; i++) { const r = mesh(new THREE.TorusGeometry(0.0084, 0.0009, 6, 24), matStd('#244f80', 0.6)); r.position.z = 0.078 + i * 0.006; iron.add(r); }
+  iron.userData.tail = V(0, 0, 0.165);
+}
+bench.add(iron);
+const IRON_REST = { pos: V(LAYOUT.ironStand[0] + 0.01, LAYOUT.ironStand[1] + 0.012, 0.028), dir: V(0, 0.62, 0.78).normalize() };
+const IRON_WORK_DIR = V(0.3, 0.62, 0.72).normalize();
+const qFromDir = (d) => new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), d);
+function setIron(pos, q) { iron.position.copy(pos); iron.quaternion.copy(q); iron.updateMatrixWorld(); updateCable(); }
+let cableMesh = null;
+const cableMat = matStd('#22262a', 0.7);
+function updateCable() {
+  const a = iron.localToWorld(iron.userData.tail.clone()), b = V(0.30, 0.385, 0.03);
+  const mid = a.clone().add(b).multiplyScalar(0.5); mid.z = Math.max(0.004, mid.z - 0.07);
+  const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([a, a.clone().add(V(0, 0.02, 0.01)), mid, b]), 24, 0.0018, 6);
+  if (cableMesh) { cableMesh.geometry.dispose(); cableMesh.geometry = geo; } else { cableMesh = mesh(geo, cableMat); bench.add(cableMesh); }
+}
+setIron(IRON_REST.pos, qFromDir(IRON_REST.dir));
+
+/* smoke */
+const smokeTex = canvasTex(64, 64, (g) => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, 'rgba(235,235,235,0.9)'); r.addColorStop(1, 'rgba(235,235,235,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); });
+const smoke = [];
+for (let i = 0; i < 36; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, opacity: 0, depthWrite: false })); s.visible = false; bench.add(s); smoke.push({ s, life: 0 }); }
+let smokeOn = false, smokeAcc = 0;
+function tickSmoke(dt) {
+  if (smokeOn) {
+    smokeAcc += dt;
+    while (smokeAcc > 0.06) {
+      smokeAcc -= 0.06; const p = smoke.find((q) => q.life <= 0);
+      if (p) { p.life = 1.6; p.s.visible = true; p.s.position.copy(iron.position).add(V((Math.random() - 0.5) * 0.002, (Math.random() - 0.5) * 0.002, 0.002)); p.v = V((Math.random() - 0.5) * 0.004, 0.003 + Math.random() * 0.004, 0.018 + Math.random() * 0.01); }
+    }
+  }
+  for (const p of smoke) {
+    if (p.life <= 0) continue;
+    p.life -= dt; p.s.position.addScaledVector(p.v, dt);
+    const k = Math.max(0, p.life / 1.6); p.s.material.opacity = 0.32 * k * (1 - k) * 4; p.s.scale.setScalar(0.006 + (1 - k) * 0.02);
+    if (p.life <= 0) p.s.visible = false;
+  }
+}
+
+/* solder joints, placed parts, highlight ring */
+const solder = { shiny: () => new THREE.MeshStandardMaterial({ color: '#d7dadd', roughness: 0.16, metalness: 1 }), cold: () => new THREE.MeshStandardMaterial({ color: '#8c9095', roughness: 0.82, metalness: 0.55 }) };
+const blobGeo = new THREE.SphereGeometry(0.00105, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2); blobGeo.rotateX(Math.PI / 2);
+const joints = {}; // key ref:i -> mesh
+const placed = {};
+const ring = mesh(new THREE.RingGeometry(0.0055, 0.0068, 48), new THREE.MeshBasicMaterial({ color: '#dd8d4e', transparent: true, opacity: 0, depthWrite: false }), false, false);
+ring.position.z = BT + 0.0003; pcb.add(ring);
+let ringPulse = 0;
+
+/* taught pose markers */
+const poseMarkers = new THREE.Group(); poseMarkers.visible = false; bench.add(poseMarkers);
+function label(text, color = '#9fd0f5') {
+  const tx = canvasTex(256, 64, (g, w, h) => { g.font = '500 30px "IBM Plex Mono", monospace'; g.fillStyle = 'rgba(10,14,18,0.78)'; const tw = g.measureText(text).width + 20; g.fillRect(0, 10, tw, 44); g.fillStyle = color; g.fillText(text, 10, 42); });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, depthTest: false, transparent: true })); s.scale.set(0.032, 0.008, 1); s.center.set(0, 0.5); s.renderOrder = 5;
+  return s;
+}
+function addPose(p, text, small = false) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(small ? 0.0022 : 0.003, 16, 10), new THREE.MeshBasicMaterial({ color: '#7cc4ff' }));
+  m.position.copy(p); poseMarkers.add(m);
+  if (text) { const l = label(text); l.position.copy(p).add(V(0.004, 0, 0.004)); poseMarkers.add(l); }
+}
+
+/* ------------------------------------------------------------------ motion + timeline */
+class Abort extends Error {}
+const tweens = new Set();
+let speed = 1, paused = false, simT = 0;
+function tween(dur, fn) { return new Promise((res, rej) => tweens.add({ el: 0, dur: Math.max(0.001, dur), fn, res, rej })); }
+function tickTweens(d) { for (const tw of [...tweens]) { tw.el += d; const k = Math.min(1, tw.el / tw.dur); tw.fn(k); if (k >= 1) { tweens.delete(tw); tw.res(); } } }
+const wait = (s) => tween(s, () => {});
+const ease = (k) => k * k * k * (k * (6 * k - 15) + 10);
+function abortAll() { for (const tw of tweens) tw.rej(new Abort()); tweens.clear(); }
+
+const cur = arm.q; // live joint vector (j1..j8), shared with the IK solver
+const OPEN = 0.25, CUP = 1.0, POINT = 2.2;
+const GRIP_Z = LAYOUT.tray.cupH - 0.009, ABOVE_Z = GRIP_Z + 0.045;
+const DOWN = V(0, 0, -1);
+const HOME = arm.solve(V(0, 0.15, 0.13), V(0, 0.6, -1).normalize(), JOINTS.map(() => 0), null, 0.06).q;
+HOME[7] = OPEN;
+const PARK = arm.solve(V(-0.12, 0.09, 0.1), V(0, 0, -1), HOME, HOME, 0.04).q; // over the tray, clear of the iron
+const park = () => moveArm(PARK);
+const ik = (p, w = 0.12, axis = DOWN) => arm.solve(p, axis, cur, HOME, w).q;
+function moveArm(q1, slow = 1) {
+  const from = cur.slice();
+  const maxd = Math.max(...q1.slice(0, 7).map((v, i) => Math.abs(v - from[i])));
+  const dur = Math.min(2.4, Math.max(0.45, maxd / 1.5)) * slow;
+  return tween(dur, (k) => { const e = ease(k); for (let i = 0; i < 7; i++) cur[i] = from[i] + (q1[i] - from[i]) * e; });
+}
+function gripper(v, dur = 0.45) { const a = cur[7]; return tween(dur, (k) => { cur[7] = a + (v - a) * ease(k); }); }
+const goHome = (slow = 1) => moveArm(HOME, slow);
+const padWorld = (x, y, dz = 0) => pcb.localToWorld(V((x - OX) / 1000, (y - OY) / 1000, BT + dz));
+
+/* camera feed shown in the picture-in-picture */
+let pipCam = sideCam, det = null;
+function setPip(which) {
+  pipCam = which === 'wrist' ? wristCam : sideCam;
+  $('pipName').textContent = which === 'wrist' ? 'WRIST CAM' : 'SIDE CAM';
+  $('pipQueue').textContent = which === 'wrist' ? 'usbvideo/b81c…' : 'usbvideo/3f9a…';
+  det = null;
+}
+function showDet(world, r, kind, text) { det = { world, r, kind, text }; }
+
+/* ------------------------------------------------------------------ UI: steps, log, caption */
+const stepState = PARTS.map(() => 'wait');
+let activeStep = -1, status = 'idle';
+function renderSteps() {
+  const chipCls = { wait: '', fetch: 'active', point: 'active', place: 'active', solder: 'active', soldered: 'ok', cold: 'warn', ok: 'ok' };
+  $('steps').innerHTML = PARTS.map((p, i) => `<li class="${i === activeStep ? 'active' : ''}"><span class="ref">${p.ref}</span><span class="part"><b>${T[lang].parts[p.ref]}</b><span>${t('cup')} ${p.slot}</span></span><span class="chip ${chipCls[stepState[i]]}">${T[lang].st[stepState[i]]}</span></li>`).join('');
+  const done = stepState.filter((s) => s === 'soldered' || s === 'ok' || s === 'cold').length;
+  $('stepMeta').textContent = `${done} / ${PARTS.length}`;
+}
+function setStep(i, s) { stepState[i] = s; activeStep = i; renderSteps(); }
+function setPill(s) { status = s; const p = $('pill'); p.textContent = t(s); p.className = 'pill' + (s === 'running' ? ' run' : s === 'done' ? ' done' : s === 'paused' ? ' pause' : ''); }
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function log(role, html) {
+  const el = document.createElement('div'); el.className = 'entry ' + role;
+  el.innerHTML = `<span class="who">${t(role)}</span><span class="txt">${html}</span>`;
+  const box = $('log'); box.appendChild(el);
+  while (box.children.length > 120) box.firstChild.remove();
+  box.scrollTop = box.scrollHeight;
+}
+function caption(role, text) {
+  if (!role) { $('caption').hidden = true; return; }
+  $('caption').hidden = false; $('caption').className = 'caption ' + role;
+  $('capWho').textContent = role === 'claude' ? 'CLAUDE · speak()' : t(role); $('capTxt').textContent = text;
+}
+async function you(text) { log('you', esc(text)); caption('you', text); await wait(0.7 + text.length * 0.03); }
+async function speak(text) { log('claude', esc(text)); caption('claude', text); await wait(0.9 + text.length * 0.035); }
+async function act(text) { log('act', esc(text)); }
+async function tool(name, args, fn) {
+  const a = Object.entries(args).map(([k, v]) => `${k}=${typeof v === 'string' ? `"${v}"` : v}`).join(', ');
+  log('tool', `→ ${name}(${esc(a)})`);
+  const t0 = simT; const r = await fn();
+  log('res', `← ${r.html ?? esc(r)} <span class="meta">· ${(simT - t0).toFixed(1)} s</span>`);
+  return r;
+}
+
+/* ------------------------------------------------------------------ demo script */
+let missedOnce = false;
+const SAY = {
+  D2: 'Step 1 of 5: D2, the B5819WS Schottky diode. Band to the lower pad, toward the 7805.',
+  R1: 'Step 2 of 5: R1, the 0603 resistor for the power LED. No polarity.',
+  D1: 'Step 3 of 5: D1, the power LED. Match its cathode mark to the silkscreen.',
+  C4: 'Step 4 of 5: C4, 470 microfarad, 25 volt. The black half on top is minus.',
+  C13: 'Step 5 of 5: C13, 330 microfarad, 25 volt, by the motor driver. Same polarity rule.',
+};
+function cupAtHandover(slot) { const c = cups[slot]; return c.group.parent === bench && c.group.position.distanceTo(V(LAYOUT.handover[0], LAYOUT.handover[1], 0.0005)) < 0.01; }
+
+async function fetchCup(p, miss, slow = 1) {
+  const c = cups[p.slot], [x, y] = LAYOUT.tray.slots[p.slot], [hx, hy] = LAYOUT.handover;
+  await gripper(OPEN);
+  await moveArm(ik(V(x, y, ABOVE_Z), 0.05), slow);
+  await moveArm(ik(V(x, y, GRIP_Z)), slow * 1.3);
+  if (miss) { await gripper(1.9, 0.5); } else { await gripper(CUP, 0.5 * slow); GB.attach(c.group); }
+  await moveArm(ik(V(x, y, ABOVE_Z), 0.05), slow);
+  await goHome(slow);
+  await moveArm(ik(V(hx, hy, ABOVE_Z), 0.05), slow);
+  await moveArm(ik(V(hx, hy, GRIP_Z)), slow * 1.3);
+  await gripper(OPEN, 0.45);
+  if (!miss) { bench.attach(c.group); c.group.position.set(hx, hy, 0.0005); c.group.rotation.set(0, 0, 0); }
+  await moveArm(ik(V(hx, hy, ABOVE_Z), 0.05));
+  await goHome();
+  return !miss;
+}
+
+async function look(p) {
+  setPip('side'); await wait(0.5);
+  const ok = cupAtHandover(p.slot);
+  showDet(V(LAYOUT.handover[0], LAYOUT.handover[1], 0.015), 0.03, ok ? 'ok' : 'bad', ok ? `cup ${p.slot} · 0.97` : 'no cup');
+  await wait(1.0);
+  return ok ? { ok, html: `<span class="ok">cup ${p.slot} in handover zone ✓</span>` } : { ok, html: `<span class="bad">handover zone empty · cup ${p.slot} still in tray</span>` };
+}
+
+const RING_R = { sod323: 0.0028, r0603: 0.0024, led1206: 0.0032, vchip: 0.0064 };
+async function pointAt(p) {
+  setPip('wrist');
+  await gripper(POINT, 0.4);
+  const target = padWorld(p.at[0], p.at[1], 0.016);
+  await moveArm(ik(target.clone().add(V(0, 0, 0.03)), 0.06));
+  await moveArm(ik(target), 1.2);
+  const [lx, ly] = bl(p.at[0], p.at[1]); ring.position.x = lx; ring.position.y = ly;
+  const r = RING_R[p.kind]; ring.scale.setScalar(r / 0.0068); ringPulse = 1;
+  showDet(padWorld(p.at[0], p.at[1], 0.002), r * 1.4, 'ok', `${p.ref} footprint`);
+  await wait(1.4);
+}
+
+async function humanPlace(p) {
+  const c = cups[p.slot];
+  await tween(0.35, (k) => { c.mat.opacity = 0.9 * (1 - k); c.content.children.forEach((m) => (m.visible = k < 0.5)); });
+  c.group.position.copy(c.home); c.content.visible = false;
+  tween(0.4, (k) => { c.mat.opacity = 0.9 * k; }).catch(() => {});
+  const part = placeOnBoard(p, makePart(p), 0.03); placed[p.ref] = part;
+  await tween(0.55, (k) => { part.position.z = BT + 0.03 * (1 - ease(k)); });
+  ringPulse = 0;
+}
+
+async function ironTo(pos, dir, dur) {
+  const p0 = iron.position.clone(), q0 = iron.quaternion.clone(), q1 = qFromDir(dir);
+  const lift = Math.max(p0.z, pos.z) + 0.05;
+  await tween(dur, (k) => {
+    const e = ease(k), p = p0.clone().lerp(pos, e); p.z += Math.sin(Math.PI * e) * (lift - Math.max(p0.z, pos.z)) * 0.8;
+    setIron(p, q0.clone().slerp(q1, Math.min(1, e * 1.4)));
+  });
+}
+async function solderPad(ref, i, x, y, cold, size) {
+  await ironTo(padWorld(x, y, 0.0009).add(V(0, 0.0004, 0)), IRON_WORK_DIR, 0.35);
+  smokeOn = true; iron.userData.tipMat.emissiveIntensity = 0.7;
+  const m = mesh(blobGeo, cold ? solder.cold() : solder.shiny(), true, true);
+  const [lx, ly] = bl(x, y); m.position.set(lx, ly, BT); m.scale.setScalar(0.01); pcb.add(m); joints[`${ref}:${i}`] = m;
+  m.userData.size = size;
+  await tween(0.55, (k) => { const s = ease(k) * size; m.scale.set(s * (cold ? 1.15 : 1), s * (cold ? 0.9 : 1), s * (cold ? 1.35 : 0.85)); });
+  smokeOn = false; iron.userData.tipMat.emissiveIntensity = 0.25;
+}
+async function solderPart(p, i) {
+  setStep(i, 'solder');
+  const size = p.kind === 'vchip' ? 1.05 : 0.55;
+  for (let k = 0; k < p.pads.length; k++) await solderPad(p.ref, k, p.pads[k][0], p.pads[k][1], p.ref === 'C4' && k === 1, size);
+  await ironTo(IRON_REST.pos, IRON_REST.dir, 0.8);
+  iron.userData.tipMat.emissiveIntensity = 0;
+  setStep(i, 'soldered');
+  placedRefs.push(p.ref); benchScreen.set({ ref: null, mode: 'idle', placed: [...placedRefs], flags: [] });
+}
+
+async function doStep(i) {
+  const p = PARTS[i];
+  setStep(i, 'fetch');
+  await you(i === 0 ? 'New SOL-MIO board. Power stage first.' : 'Next.');
+  setStep(i, 'point');
+  await tool('show_footprint', { ref: p.ref }, async () => { benchScreen.set({ ref: p.ref, mode: 'place', placed: [...placedRefs], message: SAY[p.ref] }); await wait(1.2); return { html: `bench screen: <b>${p.ref}</b> lit up · cup ${p.slot}` }; });
+  await speak(SAY[p.ref]);
+  setStep(i, 'fetch');
+  const miss = $('miss').checked && i === 1 && !missedOnce;
+  await tool('fetch_part', { slot: p.slot }, async () => { const ok = await fetchCup(p, miss); return ok ? 'ok · cup released in handover zone' : 'ok · gripper closed (no load sensed)'; });
+  let seen = await tool('look', { camera: 'side' }, () => look(p));
+  if (!seen.ok) {
+    missedOnce = true;
+    await speak('I missed the cup. Trying again, slower.');
+    await tool('fetch_part', { slot: p.slot, speed: 'slow' }, async () => { await fetchCup(p, false, 1.6); return 'ok · cup released in handover zone'; });
+    seen = await tool('look', { camera: 'side' }, () => look(p));
+  }
+  await park(); setPip('side');
+  setStep(i, 'place');
+  await act(`You take the ${T.en.parts[p.ref]} from cup ${p.slot}, place it on ${p.ref} and solder it.`);
+  caption(null);
+  await humanPlace(p);
+  await solderPart(p, i);
+}
+
+async function inspectPhase() {
+  activeStep = -1; renderSteps();
+  benchScreen.set({ ref: null, mode: 'inspect', placed: [...placedRefs], message: 'Checking the power stage with the wrist camera.' });
+  await you('Check my joints.');
+  const insp = padWorld(80, 88, 0.05);
+  await tool('inspect', { area: 'power stage' }, async () => {
+    setPip('wrist'); await gripper(POINT, 0.3);
+    await moveArm(ik(padWorld(60, 92, 0.06), 0.05));
+    await wait(0.6);
+    await moveArm(ik(insp, 0.05));
+    await wait(0.5);
+    showDet(padWorld(74.7, 89.7, 0.0008), 0.0022, 'warn', 'C4·2 cold? 0.82');
+    await wait(1.4);
+    return { html: '<span class="warn">C4 lower pad: dull, grainy fillet → likely cold joint</span> · 9 other joints OK' };
+  });
+  stepState[3] = 'cold'; renderSteps();
+  await tool('mark_joint', { ref: 'C4', pad: 2, kind: 'cold' }, async () => { benchScreen.set({ ref: 'C4', mode: 'reheat', placed: [...placedRefs], flags: [{ ref: 'C4', pad: 2, kind: 'cold', text: 'cold? reheat 3 s' }] }); await wait(0.8); return 'C4 pad 2 circled on the bench screen'; });
+  await speak('C4, lower pad looks like a cold joint. That big pad soaks up heat: hold the iron three seconds and feed a little solder.');
+  await park(); setPip('side');
+  await act('You reheat C4, lower pad.');
+  await ironTo(padWorld(74.7, 89.7, 0.0009).add(V(0, 0.0004, 0)), IRON_WORK_DIR, 0.9);
+  smokeOn = true; iron.userData.tipMat.emissiveIntensity = 0.7;
+  const j = joints['C4:1'], from = j.material.color.clone(), r0 = j.material.roughness, sz = j.userData.size;
+  await tween(1.2, (k) => { j.material.color.copy(from).lerp(new THREE.Color('#d7dadd'), k); j.material.roughness = r0 + (0.16 - r0) * k; j.material.metalness = 0.55 + 0.45 * k; j.scale.set(sz * (1.15 - 0.15 * k), sz * (0.9 + 0.1 * k), sz * (1.35 - 0.5 * k)); });
+  smokeOn = false;
+  await ironTo(IRON_REST.pos, IRON_REST.dir, 0.8); iron.userData.tipMat.emissiveIntensity = 0;
+  await you('Check it again.');
+  await tool('inspect', { ref: 'C4' }, async () => {
+    setPip('wrist'); await moveArm(ik(insp, 0.05)); await wait(0.5);
+    showDet(padWorld(74.7, 89.7, 0.0008), 0.0022, 'ok', 'C4·2 ok 0.95'); await wait(1.2);
+    return { html: '<span class="ok">C4 lower pad OK ✓ · all 10 joints pass</span>' };
+  });
+  benchScreen.set({ ref: 'C4', mode: 'ok', placed: [...placedRefs], flags: [{ ref: 'C4', pad: 2, kind: 'ok', text: 'ok' }] });
+  PARTS.forEach((_, i) => { stepState[i] = 'ok'; }); renderSteps();
+  await goHome(); setPip('side');
+}
+
+let ledOn = false;
+async function finale() {
+  await you('Plug in the 12 volt adapter.');
+  await act('12 V adapter into J2.');
+  adapter.visible = true;
+  await wait(0.4);
+  ledOn = true;
+  benchScreen.set({ ref: null, mode: 'done', placed: [...placedRefs], ledOn: true });
+  await speak('Power stage is up: 12 volts in through D2, 5 volts out of the 7805, and D1 is on.');
+  await act('On stage, the finished SOL-MIO board then drives the soft robotic glove.');
+  await wait(1.5); caption(null);
+}
+
+/* ------------------------------------------------------------------ run / reset */
+let runId = 0;
+function resetScene() {
+  abortAll();
+  cur.splice(0, 8, ...HOME);
+  for (const k of Object.keys(placed)) { placed[k].removeFromParent(); delete placed[k]; }
+  for (const k of Object.keys(joints)) { joints[k].removeFromParent(); delete joints[k]; }
+  resetCups();
+  setIron(IRON_REST.pos, qFromDir(IRON_REST.dir)); iron.userData.tipMat.emissiveIntensity = 0; smokeOn = false;
+  ring.material.opacity = 0; ringPulse = 0; ledOn = false; missedOnce = false; det = null; adapter.visible = false;
+  placedRefs = []; benchScreen.set({ ref: null, mode: 'idle', placed: [], flags: [] });
+  stepState.fill('wait'); activeStep = -1; renderSteps(); setPip('side'); caption(null);
+  $('log').innerHTML = ''; simT = 0;
+}
+async function run() {
+  const my = ++runId;
+  resetScene(); paused = false; $('pause').textContent = t('pause'); setPill('running');
+  log('act', esc('Station running · normfs :8888 · follower bus 5B61… · 2 cameras. Claude Code connected to the third-hand MCP server. Fresh SOL-MIO v1.3 on the fixture, U1 and J2 already fitted.'));
+  try {
+    await wait(0.6);
+    for (let i = 0; i < PARTS.length; i++) await doStep(i);
+    await inspectPhase();
+    await finale();
+    if (my === runId) setPill('done');
+  } catch (e) {
+    if (!(e instanceof Abort)) { console.error(e); log('res', `<span class="bad">${esc(e.message)}</span>`); }
+  }
+}
+
+/* ------------------------------------------------------------------ taught poses */
+function buildPoseMarkers() {
+  const save = cur.slice();
+  const tipAt = (q) => arm.fk(q).tip;
+  addPose(tipAt(HOME), 'home');
+  addPose(tipAt(PARK), 'park');
+  for (const p of PARTS) { const [x, y] = LAYOUT.tray.slots[p.slot]; addPose(V(x, y, GRIP_Z), p.slot); }
+  addPose(V(LAYOUT.handover[0], LAYOUT.handover[1], GRIP_Z), 'handover');
+  addPose(padWorld(80, 88, 0.05), 'inspect');
+  arm.setQ(save); robot.root.updateMatrixWorld(true);
+}
+
+/* ------------------------------------------------------------------ telemetry */
+const JN = ['j1 base', 'j2 shoulder', 'j3 elbow', 'j4 wrist', 'j5 roll', 'j6 wrist 2', 'j7 rotate', 'j8 jaws'];
+$('teleRows').innerHTML = JN.map((n, i) => `<div class="j"><span>${n}</span><span class="bar"><i id="jb${i}"></i></span><span class="v" id="jv${i}">0.50</span></div>`).join('');
+function updateTele() {
+  for (let i = 0; i < 8; i++) {
+    const [lo, hi] = arm.lim[i]; const n = (cur[i] - lo) / (hi - lo || 1);
+    $('jb' + i).style.width = (n * 100).toFixed(1) + '%'; $('jv' + i).textContent = n.toFixed(2);
+  }
+  $('clock').textContent = `t = ${simT.toFixed(1)} s`;
+}
+
+/* ------------------------------------------------------------------ frame loop */
+let W = 1, H = 1, pipW = 240, pipH = 180;
+function resize() {
+  W = stage.clientWidth; H = stage.clientHeight;
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H;
+  const far = W / H < 1 ? 1 + (1 - W / H) * 1.6 : 1;
+  camera.position.copy(CAM_HOME.target).add(CAM_HOME.pos.clone().sub(CAM_HOME.target).multiplyScalar(far));
+  camera.updateProjectionMatrix();
+  pipW = Math.round(Math.min(W * 0.36, 300)); pipH = Math.round(pipW * 0.75);
+  Object.assign($('pip').style, { width: pipW + 'px', height: pipH + 'px' });
+}
+new ResizeObserver(() => { const keep = camera.position.clone(); resize(); if (started) camera.position.copy(keep); }).observe(stage);
+let started = false;
+
+let last = performance.now(), teleAcc = 0;
+const ndc = new THREE.Vector3();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!paused) { const d = dt * speed; simT += d; tickTweens(d); tickSmoke(d); }
+  arm.setQ(cur); bench.updateMatrixWorld(true);
+  if (ringPulse > 0) ring.material.opacity = 0.55 + 0.35 * Math.sin(simT * 7); else ring.material.opacity = Math.max(0, ring.material.opacity - dt * 3);
+  screenAcc += dt; if (screenAcc > 0.05) { screenAcc = 0; benchScreen.frame(now / 1000); screenTex.needsUpdate = true; }
+  if (placed.D1) placed.D1.userData.ledMat.emissiveIntensity = ledOn ? 2.4 : 0;
+  d1Glow.intensity = ledOn && placed.D1 ? 0.025 : 0;
+  if (camGoal) {
+    const k = 1 - Math.pow(0.0015, dt);
+    camera.position.lerp(camGoal.pos, k); controls.target.lerp(camGoal.target, k);
+    if (camera.position.distanceTo(camGoal.pos) < 0.002) camGoal = null;
+  }
+  controls.update();
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, H); renderer.render(scene, camera);
+  // picture-in-picture: what Claude sees
+  pipCam.aspect = pipW / pipH; pipCam.updateProjectionMatrix();
+  renderer.setScissorTest(true); renderer.setScissor(13, 13, pipW, pipH); renderer.setViewport(13, 13, pipW, pipH);
+  renderer.render(scene, pipCam); renderer.setScissorTest(false);
+  const box = $('det');
+  if (det) {
+    pipCam.updateMatrixWorld();
+    const c = det.world.clone().project(pipCam);
+    const right = V(1, 0, 0).applyQuaternion(pipCam.getWorldQuaternion(new THREE.Quaternion())).multiplyScalar(det.r);
+    const e = det.world.clone().add(right).project(pipCam);
+    const rr = Math.max(10, Math.abs(e.x - c.x) * pipW / 2);
+    const cx = (c.x + 1) / 2 * pipW, cy = (1 - c.y) / 2 * pipH;
+    box.hidden = !(c.z < 1 && cx > -rr && cx < pipW + rr);
+    Object.assign(box.style, { left: (cx - rr) + 'px', top: (cy - rr) + 'px', width: rr * 2 + 'px', height: rr * 2 + 'px' });
+    box.className = 'det ' + (det.kind === 'ok' ? '' : det.kind);
+    $('detTxt').textContent = det.text;
+  } else box.hidden = true;
+  teleAcc += dt; if (teleAcc > 0.1) { teleAcc = 0; updateTele(); }
+  requestAnimationFrame(frame);
+}
+
+/* ------------------------------------------------------------------ wiring */
+$('run').onclick = () => run();
+$('pause').onclick = () => { if (status !== 'running' && status !== 'paused') return; paused = !paused; $('pause').textContent = paused ? t('resume') : t('pause'); setPill(paused ? 'paused' : 'running'); };
+$('reset').onclick = () => { runId++; resetScene(); paused = false; $('pause').textContent = t('pause'); setPill('idle'); };
+function setView(v) {
+  const g = VIEWS[v]; const far = W / H < 1 ? 1 + (1 - W / H) * 1.6 : 1;
+  camGoal = { pos: g.target.clone().add(g.pos.clone().sub(g.target).multiplyScalar(far)), target: g.target.clone() };
+  if (reduceMotion) { camera.position.copy(camGoal.pos); controls.target.copy(camGoal.target); camGoal = null; }
+  $('viewSeg').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x.dataset.v === v));
+}
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+$('viewSeg').onclick = (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); };
+$('speedSeg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; speed = +b.dataset.s; $('speedSeg').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b)); };
+$('poses').onchange = (e) => { poseMarkers.visible = e.target.checked; };
+$('lang-en').onclick = () => { lang = 'en'; applyLang(); };
+$('lang-tr').onclick = () => { lang = 'tr'; applyLang(); };
+window.addEventListener('keydown', (e) => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('pause').click(); } });
+
+try { const saved = localStorage.getItem('thirdhand-lang'); if (saved === 'tr' || saved === 'en') lang = saved; } catch (e) { /* storage unavailable */ }
+const qs = new URLSearchParams(location.search);
+if (qs.get('speed')) speed = +qs.get('speed');
+cur.splice(0, 8, ...HOME);
+$('screenWrap').appendChild(screenCanvas);
+bench.updateMatrixWorld(true);
+buildPoseMarkers();
+applyLang();
+resize(); started = true;
+$('loading').hidden = true;
+log('act', esc('Bench ready. Press “Run demo” or wait a moment.'));
+requestAnimationFrame((t0) => { last = t0; requestAnimationFrame(frame); });
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (qs.get('lang') === 'tr') { lang = 'tr'; applyLang(); }
+if (VIEWS[qs.get('view')]) { setView(qs.get('view')); camera.position.copy(camGoal.pos); controls.target.copy(camGoal.target); camGoal = null; }
+if (qs.get('seek')) {
+  // local debugging: jump the demo forward without waiting for real time
+  run();
+  (async () => { const end = +qs.get('seek'); while (simT < end) { simT += 0.05; tickTweens(0.05); tickSmoke(0.05); await new Promise((r) => setTimeout(r, 0)); } paused = true; })();
+} else if (!reduce || qs.get('autoplay')) setTimeout(() => { if (status === 'idle') run(); }, qs.get('autoplay') ? 50 : 1500);
+</script>
+
+</body>
+</html>
