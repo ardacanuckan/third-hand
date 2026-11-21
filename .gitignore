@@ -24,3 +24,12 @@ node_modules/
 
 # DSA visual-check output
 *.visual-check.*
+
+# VLA: NormaCore checkout, datasets and checkpoints (large, local only)
+vla/.norma-core/
+vla/data/
+vla/checkpoints/
+vla/runs/
+*.parquet
+smolvla-bundle.zip
+vla/nebius/nebius.env

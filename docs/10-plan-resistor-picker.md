@@ -124,6 +124,8 @@ Sleeps Sun 03:00–07:00.
 
 Sleeps Sat 23:00–Sun 03:00 while training runs.
 
+Everything for V1–V5 is in [`vla/`](../vla/README.md): setup, recording rules, export and dataset check, an ElRobot trainer (8 joints, not upstream's fixed 6), the Nebius submit and fetch scripts, and `policy_grasp.py` with its tests. It is tested end to end without the arm, but not yet on the arm or on a Nebius GPU.
+
 ### AGENT · Claude and vision (`C`)
 *Owns on stage:* Claude reading the rack and catching the swapped resistors.
 
