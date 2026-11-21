@@ -64,3 +64,13 @@ plays it on a light servo model (the STS3215 speed/acc ramp plus a 10 ms lag). C
 physics clips with `node viewer/test_engine.mjs`: mean joint difference 0.36°. Prompt clips are not
 physics-checked for torque; "Copy as Python gesture" gives a `GESTURES` entry to run through
 `sim_character.py` before the real arm. Prompts work only inside claude.ai (the `sample` capability).
+
+### Scenes with props
+
+`character.SCENES` adds 15 little stories (kick a ball, put on a hat, air kiss, catch a ball, smell a
+flower, scared by a spider, sneeze, nod off, …). Each `Step` now carries the keyframe it starts, and
+the exporter saves those times per clip, so the viewer's props (ball on a tee, bowler hat, heart,
+flower, thrown ball, spider) happen at each character's own moment. Physics check: from the reaching
+pose every scene stays ≤ 71 % of shoulder stall after softening the kick and hat flick and capping
+j4 at 80 and j6 at 150 (they whip and push the shoulder); from standing ≤ 42 %.
+`viewer/pick.js` (wave to you, pick up the smallest) came from a parallel session and is kept as is.

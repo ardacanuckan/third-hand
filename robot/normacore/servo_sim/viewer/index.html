@@ -119,6 +119,8 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
       <select id="speed"><option value="1">1×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select>
     </label>
     <div class="group" id="gestures" role="group" aria-label="Gesture"><span class="glabel">Gesture</span></div>
+    <div class="group" id="scenes" role="group" aria-label="Scene"><span class="glabel">Scene</span></div>
+    <div class="group" id="pickbar"><button class="ghost" id="shuffle" type="button">Shuffle the objects</button><span class="hint" id="pickinfo"></span></div>
   </div>
 
   <div class="cast">
@@ -151,11 +153,14 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
       <thead><tr><th>Character</th><th>Laban effort</th><th>Acceleration j1–j8</th><th>Beat</th><th>Size</th><th>Flow</th><th>Anticip.</th><th>Overshoot</th><th>Tremor</th><th>Shoulder peak</th></tr></thead>
       <tbody id="rows"></tbody>
     </table></div>
-    <div class="hint">Acceleration is the STS3215 register 0x29 (units of 100 ticks/s², 254 max). Grey bars are the shoulder and elbow, capped at 30 and 40 for every character because the simulation showed fast elbow moves overloading the shoulder. Shoulder peak is the highest load over all ten clips, standing pose, as a share of 2.94 N·m stall torque.</div>
+    <div class="hint">Acceleration is the STS3215 register 0x29 (units of 100 ticks/s², 254 max). Grey bars are the shoulder and elbow, capped at 30 and 40 for every character because the simulation showed fast elbow moves overloading the shoulder. Shoulder peak is the highest load over every gesture and scene clip, standing pose, as a share of 2.94 N·m stall torque.</div>
   </section>
 
   <section class="notes">
     <div><h3>How the clips were made</h3><p>Each character's gesture is planned by <code>character.py</code>, then played on a MuJoCo model of the ElRobot with real 55 g servos. Every servo runs a model of the STS3215 firmware: speed and acceleration ramp, position loop, 2.94 N·m and 4.71 rad/s motor limits. The arms show the joint angles that came out, at 30 frames per second.</p></div>
+    <div><h3>Wave to you</h3><p>The arm rolls its forearm a quarter turn so the wrist joint swings sideways, raises its open jaws like a hand, and waves three times. Its base turns towards the camera, so orbit the view and the arms keep facing you. Each character waves at its own speed and size.</p></div>
+    <div><h3>Pick up the smallest</h3><p>Three objects and a cup sit in front of each arm. The arm looks over every object, settles on the one with the least volume (ringed in its colour), reaches straight down, closes the jaws to 1.5 mm less than the object's width, and drops it in the cup. The reach comes from inverse kinematics on the ElRobot model; each character plays those joint targets with its own servo acceleration, speed and pauses, which is why the sleepy one takes three times as long as the trickster.</p></div>
+    <div><h3>Scenes</h3><p>Fifteen little stories: kick a ball off a tee, grab a hat with the mouth and flick it onto the head, blow an air kiss, catch a thrown ball, smell a flower, get scared by a spider, sneeze, nod off and more. Props are timed to each character's own keyframes, so the trickster kicks sooner than the grump. All scenes were checked in the physics model: from standing, the shoulder stays at or below 42 % of stall.</p></div>
     <div><h3>What to look for</h3><p>Same gesture, different settings. The trickster winds up and overshoots, the grump stops dead at each pose, the shy one barely moves and waits, and smooth never stops inside a gesture because it follows a minimum-jerk curve instead of jumping between poses.</p></div>
     <div><h3>Limits</h3><p>Servo gain, rotor inertia and backlash are estimates; the real arm will differ a little. Joint directions depend on calibration, so a gesture can mirror on your arm (flip it in <code>SIGN</code>). Station and network delay are not in the clips.</p></div>
   </section>
@@ -171,18 +176,22 @@ tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildRobot } from './core.js';
+import { buildRobot, Arm } from './core.js';
+import { layout, planPick, performPick, buildProps, performWave } from './pick.js';
 import { perform, sanitize } from './engine.js';
 
 const $ = (s) => document.querySelector(s);
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const SLOT_VARS = ['--slot-a', '--slot-b', '--slot-c'];
-const GESTURE_ORDER = ['curious', 'yes', 'no', 'hello', 'look_around', 'startle', 'sigh', 'laugh', 'sulk', 'idle'];
+const GESTURE_ORDER = ['wave', 'pick', 'curious', 'yes', 'no', 'hello', 'look_around', 'startle', 'sigh', 'laugh', 'sulk', 'idle'];
 let promptKF = null, promptClips = {}, promptTitle = '';
-const label = (g) => g === 'prompt' ? 'your prompt' : g.replace('_', ' ');
+const SCENE_LABEL = { wave_hello: 'say hello', kick_ball: 'kick a ball', put_on_hat: 'put on a hat', air_kiss: 'air kiss', yawn_stretch: 'yawn & stretch', sniff_flower: 'smell a flower', catch_ball: 'catch a ball', nod_off: 'nod off', scared: 'scared by a spider' };
+const label = (g) => g === 'prompt' ? 'your prompt' : g === 'pick' ? 'pick up the smallest' : g === 'wave' ? 'wave to you' : (SCENE_LABEL[g] || g.replaceAll('_', ' '));
+const waveClips = {};
+let pickSeed = 0, pickLayout = null, pickPlan = null, pickClips = {};
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-let data, gesture = 'curious', cast = ['trickster', 'smooth', 'grump'];
+let data, gesture = 'wave', cast = ['trickster', 'smooth', 'grump'];
 let playing = !reduce, speed = 1, t = 0;
 
 /* ---------- three.js stage ---------- */
@@ -212,11 +221,28 @@ const arms = XS.map((x, i) => {
   zup.add(robot.root);
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.006, 48), new THREE.MeshStandardMaterial({ roughness: 0.7 }));
   base.position.y = -0.003; holder.add(base);
-  return { robot, base };
+  const props = new THREE.Group(); zup.add(props);
+  return { robot, base, props, kit: null, zup };
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), floorMat); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.007; scene.add(ground);
 
-function paintSlots() { arms.forEach((a, i) => a.base.material.color.set(css(SLOT_VARS[i]))); }
+function paintSlots() { arms.forEach((a, i) => { a.base.material.color.set(css(SLOT_VARS[i])); a.kit?.ring.material.color.set(css(SLOT_VARS[i])); }); propSets?.forEach((P) => P.recolor()); }
+
+/* ---------- pick up the smallest object and drop it in the cup ---------- */
+// One hidden arm for the IK; every character then plays the same joint targets through its own servo settings.
+const ikArm = new Arm(buildRobot(window.ELROBOT, () => PLA));
+function setupPick(seed) {
+  pickSeed = seed; pickLayout = layout(seed); pickClips = {};
+  pickPlan = planPick(ikArm, pickLayout, data.stand);
+  arms.forEach((a, i) => {
+    a.props.clear();
+    a.kit = buildProps(pickLayout, css(SLOT_VARS[i]));
+    a.kit.target.matrixAutoUpdate = false;
+    a.props.add(a.kit.group);
+  });
+  const s = pickLayout.items[pickLayout.smallest];
+  $('#pickinfo').textContent = `Smallest: the ${s.kind}, ${Math.round(s.width * 1000)} mm across`;
+}
 
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -228,14 +254,23 @@ new ResizeObserver(resize).observe(canvas);
 /* ---------- clips ---------- */
 const clip = (name) => {
   if (!name) return null;
+  if (gesture === 'wave') return (waveClips[name] ??= performWave(data, name));
+  if (gesture === 'pick') return pickClips[name] ??= performPick(data, name, ikArm, pickLayout, pickPlan);
   if (gesture !== 'prompt') return data.clips[`${name}/${gesture}`];
   if (!promptClips[name]) promptClips[name] = { q: perform(data, name, promptKF.map((k) => [k.beats, k.pose])), torque: null, peak: null };
   return promptClips[name];
 };
 const duration = () => Math.max(...cast.filter(Boolean).map((n) => clip(n).q.length)) / data.fps;
 
-function pose(i, frame) {
-  const q = frame;
+// For the wave, j1 holds a 0..1 envelope: scale it by the yaw that points this arm at the camera.
+const _cam = new THREE.Vector3();
+function yawToCamera(i) {
+  arms[i].zup.updateMatrixWorld(true);
+  const p = arms[i].zup.worldToLocal(_cam.copy(camera.position));
+  return Math.max(-1.5, Math.min(1.5, -Math.atan2(p.x, p.y)));
+}
+function pose(i, frame, envelope = false) {
+  const q = envelope ? [frame[0] * yawToCamera(i), ...frame.slice(1)] : frame;
   data.joints.forEach((j, k) => arms[i].robot.set(j, q[k]));
 }
 
@@ -244,14 +279,200 @@ function render() {
   arms.forEach((a, i) => {
     const name = cast[i];
     a.base.visible = a.robot.root.visible = !!name;
+    a.props.visible = false;
     if (!name) return;
-    const c = clip(name);
-    pose(i, c.q[Math.min(fi, c.q.length - 1)]);
+    const c = clip(name), f = Math.min(fi, c.q.length - 1);
+    pose(i, c.q[f], c.yawEnvelope);
+    a.props.visible = gesture === 'pick';
+    if (c.obj) { a.kit.target.matrix.fromArray(c.obj[f]); a.kit.ring.visible = f < c.q.length * 0.3; }
   });
+  updateProps(fi);
   drawSparks(fi);
   const d = duration();
   $('#time').textContent = `${t.toFixed(1)} / ${d.toFixed(1)} s`;
   if (document.activeElement !== $('#scrub')) $('#scrub').value = Math.round((t / d) * 1000);
+}
+
+/* ---------- props for scenes: timed to each character's own keyframes ---------- */
+const UP = new THREE.Vector3(0, 1, 0);
+const mat = (c, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, ...extra });
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _box = new THREE.Box3();
+function meshCenter(link, out) {
+  const m = link.userData.mesh; m.geometry.boundingBox || m.geometry.computeBoundingBox();
+  return out.copy(m.geometry.boundingBox.getCenter(_b)).applyMatrix4(m.matrixWorld);
+}
+function headInfo(arm) {          // mouth point, head centre, mouth direction, gripper world matrix (current pose)
+  const L = arm.robot.links;
+  scene.updateMatrixWorld(true);              // parents (holder, Z-up frame) included
+  const mouth = meshCenter(L['Gripper_Jaw_01_v1_1'], new THREE.Vector3()).add(meshCenter(L['Gripper_Jaw_02_v1_1'], _a)).multiplyScalar(0.5);
+  const head = meshCenter(L['Gripper_Base_v1_1'], new THREE.Vector3());
+  const dir = mouth.clone().sub(head).normalize();
+  return { mouth: mouth.add(dir.clone().multiplyScalar(0.012)), head, dir, g: L['Gripper_Base_v1_1'] };
+}
+function infoAt(i, c, time) {     // pose arm i at a moment of its clip, read the head, restore
+  const f = Math.min(Math.max(0, Math.round(time * data.fps)), c.q.length - 1);
+  pose(i, c.q[f]);
+  const h = headInfo(arms[i]);
+  h.gWorld = h.g.matrixWorld.clone();
+  return h;
+}
+function makeBall(color) {
+  const g = new THREE.Group();
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.02, 24, 16), mat('#f4f4f2'));
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.0201, 0.0025, 8, 32), mat(color));
+  ball.add(band); g.add(ball); g.userData.ball = ball; return g;
+}
+function makeHat(color) {
+  const g = new THREE.Group();
+  const felt = mat('#23262b', { roughness: 0.8 });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.003, 32), felt);
+  const crown = new THREE.Mesh(new THREE.SphereGeometry(0.02, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), felt);
+  crown.scale.set(1, 1.15, 1); crown.position.y = 0.002;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0203, 0.0203, 0.005, 32, 1, true), mat(color));
+  band.position.y = 0.0045;
+  g.add(brim, crown, band); return g;
+}
+function makeHeart() {
+  const sh = new THREE.Shape(); const x = 0, y = 0;
+  sh.moveTo(x, y + 0.25); sh.bezierCurveTo(x, y + 0.25, x - 0.05, y, x - 0.25, y);
+  sh.bezierCurveTo(x - 0.55, y, x - 0.55, y + 0.35, x - 0.55, y + 0.35);
+  sh.bezierCurveTo(x - 0.55, y + 0.55, x - 0.35, y + 0.77, x, y + 0.95);
+  sh.bezierCurveTo(x + 0.35, y + 0.77, x + 0.55, y + 0.55, x + 0.55, y + 0.35);
+  sh.bezierCurveTo(x + 0.55, y + 0.35, x + 0.55, y, x + 0.25, y);
+  sh.bezierCurveTo(x + 0.1, y, x, y + 0.25, x, y + 0.25);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.18, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 3 });
+  geo.center(); geo.rotateZ(Math.PI); geo.scale(0.035, 0.035, 0.035);
+  return new THREE.Mesh(geo, mat('#e0457b', { transparent: true, roughness: 0.35 }));
+}
+function makeFlower(color) {
+  const g = new THREE.Group();
+  const stemM = mat('#3f8a4f');
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.0018, 0.0018, 1, 8), stemM); g.add(stem); g.userData.stem = stem;
+  const head = new THREE.Group(); g.add(head); g.userData.head = head;
+  const petalM = mat('#f2a7c3');
+  for (let k = 0; k < 6; k++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.009, 12, 8), petalM);
+    p.scale.set(1, 0.35, 0.6); p.position.set(Math.cos(k * Math.PI / 3) * 0.011, 0, Math.sin(k * Math.PI / 3) * 0.011);
+    p.rotation.y = -k * Math.PI / 3; head.add(p);
+  }
+  const mid = new THREE.Mesh(new THREE.SphereGeometry(0.006, 12, 8), mat('#f2c230')); mid.position.y = 0.002; head.add(mid);
+  const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.01, 10, 6), stemM); leaf.scale.set(1.4, 0.2, 0.6); g.add(leaf); g.userData.leaf = leaf;
+  return g;
+}
+function makeSpider() {
+  const g = new THREE.Group(); const black = mat('#141414', { roughness: 0.4 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.009, 16, 10), black); body.scale.set(1, 0.7, 1.3); body.position.y = 0.008; g.add(body);
+  const headS = new THREE.Mesh(new THREE.SphereGeometry(0.005, 12, 8), black); headS.position.set(0, 0.007, 0.012); g.add(headS);
+  const legs = [];
+  for (const side of [-1, 1]) for (let k = 0; k < 4; k++) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.0009, 0.0009, 0.026, 5), black);
+    leg.position.set(side * 0.012, 0.006, (k - 1.5) * 0.006); leg.rotation.z = side * 1.1; leg.rotation.y = (k - 1.5) * 0.35 * side;
+    g.add(leg); legs.push(leg);
+  }
+  g.userData.legs = legs; return g;
+}
+function makeTee() { return new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.012, 1, 16), mat('#b8a27a')); }
+function makeStool() { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 24), mat('#9aa6b2')); return m; }
+
+const propSets = arms.map((a, i) => {
+  const col = () => css(SLOT_VARS[i]);
+  const P = { ball: makeBall('#555'), tee: makeTee(), hat: makeHat('#888'), stool: makeStool(), heart: makeHeart(),
+              flower: makeFlower(), spider: makeSpider(), cache: null, key: '' };
+  for (const k of ['ball', 'tee', 'hat', 'stool', 'heart', 'flower', 'spider']) { P[k].visible = false; scene.add(P[k]); }
+  P.recolor = () => { P.ball.userData.ball.children[0].material.color.set(col()); P.hat.children[2].material.color.set(col()); };
+  return P;
+});
+function placeColumn(obj, topY, x, z) { obj.position.set(x, topY / 2 - 0.007, z); obj.scale.set(1, Math.max(0.001, topY + 0.007), 1); }
+
+function prepareProps(i, c, spec) {        // positions at the key moments, computed once per clip
+  const K = c.keys, P = propSets[i], cache = { spec };
+  const at = (k) => infoAt(i, c, K[Math.min(k, K.length - 1)]);
+  if (spec.type === 'kick') { const h = at(spec.at); cache.rest = h.mouth.clone().addScaledVector(h.dir, 0.012); cache.t0 = K[spec.at];
+    const base = arms[i].base.getWorldPosition(new THREE.Vector3()); cache.vdir = new THREE.Vector3(cache.rest.x - base.x, 0, cache.rest.z - base.z).normalize(); }
+  if (spec.type === 'hat') { const g = at(spec.grab), tt = at(spec.toss), l = at(spec.land);
+    cache.grabPos = g.mouth.clone(); cache.tossPos = tt.mouth.clone();
+    const top = l.head.clone().addScaledVector(UP, 0.03);
+    const inv = l.gWorld.clone().invert();
+    cache.localTop = top.clone().applyMatrix4(inv);
+    const gq = new THREE.Quaternion(); l.gWorld.decompose(_a, gq, _b); cache.localQ = gq.clone().invert();
+    cache.landTop = top; cache.tG = K[spec.grab]; cache.tT = K[spec.toss]; cache.tL = K[spec.land]; }
+  if (spec.type === 'heart') { const h = at(spec.at); cache.from = h.mouth.clone(); cache.t0 = K[spec.at]; }
+  if (spec.type === 'flower') { const h = at(spec.at); cache.pos = h.mouth.clone().addScaledVector(h.dir, 0.014); }
+  if (spec.type === 'catch') { const h = at(spec.at); cache.to = h.mouth.clone(); cache.t1 = K[spec.at];
+    cache.from = cache.to.clone().add(new THREE.Vector3(-0.42, 0.06, 0.18)); }
+  if (spec.type === 'spider') { const h = at(0); cache.home = new THREE.Vector3(h.mouth.x + h.dir.x * 0.05, 0, h.mouth.z + Math.max(0.04, h.dir.z * 0.08)); cache.t0 = K[spec.at]; }
+  return cache;
+}
+
+function updateProps(fi) {
+  arms.forEach((arm, i) => {
+    const P = propSets[i];
+    for (const k of ['ball', 'tee', 'hat', 'stool', 'heart', 'flower', 'spider']) P[k].visible = false;
+    const name = cast[i], spec = data.props[gesture];
+    if (!name || !spec || gesture === 'prompt') return;
+    const c = clip(name), key = name + '/' + gesture;
+    if (P.key !== key) { const cur = c.q[Math.min(fi, c.q.length - 1)]; P.cache = prepareProps(i, c, spec); P.key = key; pose(i, cur); }
+    const C = P.cache, tt = fi / data.fps;
+    const now = headInfo(arm);
+    if (spec.type === 'kick') {
+      const r = 0.02; P.ball.visible = P.tee.visible = true;
+      placeColumn(P.tee, C.rest.y - r, C.rest.x, C.rest.z);
+      if (tt < C.t0) { P.ball.position.copy(C.rest); P.ball.userData.ball.rotation.set(0, 0, 0); return; }
+      // flight: forward and up, gravity, bounces with friction
+      let p = C.rest.clone(), v = C.vdir.clone().multiplyScalar(0.9).add(new THREE.Vector3(0, 0.9, 0)), dist = 0;
+      const dt = 1 / 240;
+      for (let s = 0; s < (tt - C.t0) / dt && s < 2400; s++) {
+        v.y -= 9.81 * dt; p.addScaledVector(v, dt); dist += Math.hypot(v.x, v.z) * dt;
+        if (p.y < r - 0.007) { p.y = r - 0.007; v.y = -v.y * 0.5; v.x *= 0.8; v.z *= 0.8; if (Math.abs(v.y) < 0.05) v.y = 0; }
+      }
+      P.ball.position.copy(p); P.ball.userData.ball.rotation.set(dist / r, 0, 0);
+    }
+    if (spec.type === 'hat') {
+      P.hat.visible = true;
+      if (tt < C.tG) { P.stool.visible = true; placeColumn(P.stool, C.grabPos.y - 0.004, C.grabPos.x, C.grabPos.z); P.hat.position.copy(C.grabPos); P.hat.quaternion.identity(); }
+      else if (tt < C.tT) { P.hat.position.copy(now.mouth); P.hat.quaternion.identity(); }
+      else if (tt < C.tL) {
+        const u = (tt - C.tT) / Math.max(0.05, C.tL - C.tT);
+        P.hat.position.lerpVectors(C.tossPos, C.landTop, u); P.hat.position.y += Math.sin(u * Math.PI) * 0.12;
+        P.hat.rotation.set(0, u * Math.PI * 2, Math.sin(u * Math.PI) * 0.6);
+      } else {
+        P.hat.position.copy(C.localTop).applyMatrix4(now.g.matrixWorld);
+        const gq = new THREE.Quaternion(); now.g.matrixWorld.decompose(_a, gq, _b);
+        P.hat.quaternion.copy(gq).multiply(C.localQ);
+      }
+    }
+    if (spec.type === 'heart') {
+      const age = tt - C.t0; if (age < 0 || age > 2.2) return;
+      P.heart.visible = true;
+      const toCam = camera.position.clone().sub(C.from).normalize();
+      P.heart.position.copy(C.from).addScaledVector(toCam, age * 0.16).addScaledVector(UP, age * 0.05 + Math.sin(age * 6) * 0.004);
+      P.heart.lookAt(camera.position);
+      const s = Math.min(1, age / 0.25) * (1 + 0.08 * Math.sin(age * 10)); P.heart.scale.setScalar(s);
+      P.heart.material.opacity = age > 1.5 ? Math.max(0, 1 - (age - 1.5) / 0.7) : 1;
+    }
+    if (spec.type === 'flower') {
+      P.flower.visible = true; const f = P.flower;
+      f.position.set(C.pos.x, 0, C.pos.z);
+      f.userData.stem.scale.y = C.pos.y + 0.007; f.userData.stem.position.y = (C.pos.y - 0.007) / 2;
+      f.userData.head.position.y = C.pos.y; f.userData.leaf.position.set(0.006, C.pos.y * 0.45, 0);
+    }
+    if (spec.type === 'catch') {
+      const t0 = C.t1 - 0.9;
+      if (tt < t0) return;
+      P.ball.visible = true; P.ball.userData.ball.rotation.set(0, 0, 0);
+      if (tt < C.t1) { const u = (tt - t0) / 0.9; P.ball.position.lerpVectors(C.from, C.to, u); P.ball.position.y += Math.sin(u * Math.PI) * 0.12; P.ball.userData.ball.rotation.set(u * 8, 0, 0); }
+      else P.ball.position.copy(now.mouth);
+    }
+    if (spec.type === 'spider') {
+      P.spider.visible = true;
+      const age = tt - C.t0;
+      const run = age > 0.3 ? Math.min(0.5, (age - 0.3) * 0.35) : 0;
+      P.spider.position.set(C.home.x + run, 0, C.home.z + run * 0.4);
+      P.spider.rotation.y = run > 0 ? Math.PI / 2.4 : 0;
+      const wig = run > 0 && run < 0.5 ? Math.sin(tt * 40) * 0.35 : Math.sin(tt * 3) * 0.08;
+      P.spider.userData.legs.forEach((l, k) => { l.rotation.x = (k % 2 ? 1 : -1) * wig; });
+    }
+  });
 }
 
 /* ---------- slot cards with shoulder-torque sparklines ---------- */
@@ -297,6 +518,11 @@ function buildChips() {
     b.addEventListener('click', () => { gesture = g; t = 0; update(); });
     gs.append(b);
   }
+  for (const g of data.scenes || []) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = label(g); b.id = 'g-' + g;
+    b.addEventListener('click', () => { gesture = g; t = 0; playing = true; $('#play').textContent = 'Pause'; update(); });
+    $('#scenes').append(b);
+  }
   const cs = $('#cast');
   for (const n of Object.keys(data.characters)) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.id = 'c-' + n; b.dataset.n = n;
@@ -321,14 +547,17 @@ function toggle(n) {
   t = 0; update();
 }
 function update() {
-  document.querySelectorAll('#gestures .chip').forEach((b) => b.setAttribute('aria-pressed', b.id === 'g-' + gesture));
+  propSets.forEach((P) => { P.key = ''; });
+  document.querySelectorAll('#gestures .chip, #scenes .chip').forEach((b) => b.setAttribute('aria-pressed', b.id === 'g-' + gesture));
   document.querySelectorAll('#cast .chip').forEach((b) => {
     const i = cast.indexOf(b.dataset.n);
     b.setAttribute('aria-pressed', i >= 0);
     b.querySelector('.sw').style.background = i >= 0 ? `var(${SLOT_VARS[i]})` : 'var(--line)';
   });
+  $('#pickbar').hidden = gesture !== 'pick';
   buildSlots(); render();
 }
+$('#shuffle').addEventListener('click', () => { setupPick(pickSeed + 1); t = 0; update(); });
 $('#play').addEventListener('click', () => { playing = !playing; $('#play').textContent = playing ? 'Pause' : 'Play'; });
 $('#speed').addEventListener('change', (e) => { speed = +e.target.value; });
 $('#scrub').addEventListener('input', (e) => { t = (e.target.value / 1000) * duration(); render(); });
@@ -451,6 +680,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (playing && data) { t += dt * speed; if (t > duration()) t = 0; render(); }
+  else if (data && gesture === 'wave') render();            // paused mid-wave: still turn to follow the camera
   controls.update(); renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -458,7 +688,7 @@ function frame(now) {
 fetch('anim.json').then((r) => r.json()).then((d) => {
   data = d;
   $('#loading').hidden = true;
-  paintSlots(); buildChips(); buildTable(); update(); resize(); setupPrompt();
+  setupPick(0); paintSlots(); buildChips(); buildTable(); update(); resize(); setupPrompt();
   $('#play').textContent = playing ? 'Pause' : 'Play';
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { paintSlots(); render(); });
   new MutationObserver(() => { paintSlots(); render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

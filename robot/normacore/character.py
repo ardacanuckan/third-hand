@@ -40,9 +40,11 @@ MAX_DEV = {"j1": 0.15, "j2": 0.05, "j3": 0.12, "j4": 0.12, "j5": 0.12, "j6": 0.1
 # stall torque (overload trip). Most of it is the elbow's reaction, not the shoulder's own motion:
 # elbow cap 40 -> worst case 69 % (holding the reaching pose alone is ~38 %). The shoulder and elbow are
 # never sudden, whatever the character: personality lives in the wrist, base turn and jaws.
+# The scenes (kick, hat flick) showed the neck (j4) and wrist pitch (j6) also push the shoulder when
+# they whip: caps 80 and 150 take the trickster's kick from 92 % to ~80 % in the reaching pose.
 BASE = {"j1": (40, 600), "j2": (30, 600), "j3": (60, 700), "j4": (100, 800),
         "j5": (150, 900), "j6": (150, 900), "j7": (150, 900), "j8": (150, 900)}
-ACC_CAP = {"j1": 80, "j2": 30, "j3": 40, "j4": 200, "j5": 254, "j6": 254, "j7": 254, "j8": 254}
+ACC_CAP = {"j1": 80, "j2": 30, "j3": 40, "j4": 80, "j5": 254, "j6": 150, "j7": 254, "j8": 254}
 SPEED_CAP = {"j1": 900, "j2": 700, "j3": 1000, "j4": 1500, "j5": 2000, "j6": 2000, "j7": 2000, "j8": 2000}
 
 
@@ -119,6 +121,94 @@ GESTURES: dict[str, list[tuple[float, dict[str, float]]]] = {
     "sulk":        [(2, {"j1": -1.4, "j3": 0.8, "j6": 1.0}), (3, {}), (2, {"j1": 0, "j3": 0, "j6": 0})],
 }
 
+# Scenes: little stories with a beginning and an end. Same keyframe format as GESTURES.
+# The "head" is the gripper and the jaws are its mouth, like a desk lamp with a beak.
+SCENES: dict[str, list[tuple[float, dict[str, float]]]] = {
+    "wave_hello":   [(1, {"j3": -1, "j6": -1.2, "j8": 1.5}),
+                     (0.6, {"j5": 1.5, "j7": 1.5}), (0.6, {"j5": -1.5, "j7": -1.5}),
+                     (0.6, {"j5": 1.5, "j7": 1.5}), (0.6, {"j5": -1.5, "j7": -1.5}),
+                     (1, {"j5": 0, "j7": 0, "j8": 0}), (1.5, {"j3": 0, "j6": 0})],
+    "kick_ball":    [(1, {"j6": 1.2}),                                        # look at the ball
+                     (1, {"j2": -0.3, "j3": -1, "j4": -1.2, "j6": -0.5}),     # wind up
+                     (0.4, {"j2": 0.1, "j3": 0.5, "j4": 1.6, "j6": 2.2}),     # swing: neck and wrist do the kick
+                     (0.5, {"j4": 0.5, "j6": -1}),                            # contact, follow through
+                     (1.5, {"j6": -1.5, "j3": -0.5}),                         # watch it fly
+                     (0.4, {"j8": 2.5}), (0.3, {"j8": 0}), (0.3, {"j8": 2.5}), (0.3, {"j8": 0}),
+                     (1.5, {"j2": 0, "j3": 0, "j4": 0, "j6": 0})],
+    "put_on_hat":   [(1, {"j2": 0.4, "j3": 1.2, "j4": 0.3, "j6": 2}),        # look down at the hat
+                     (0.6, {"j8": 3}), (0.6, {"j4": 1}),                      # open wide, reach
+                     (0.5, {"j8": 0.5}),                                      # bite the brim
+                     (1, {"j2": 0, "j3": 0, "j4": -1, "j6": 0}),              # lift it
+                     (0.5, {"j6": 2.2, "j3": 0.8}),                           # dip
+                     (0.35, {"j6": -2.5, "j3": -0.8, "j8": 3}),               # flick it up (wrist, not shoulder)
+                     (1, {"j6": 0.3, "j3": -0.5, "j8": 0}),                   # head under it
+                     (1.5, {"j3": -1.2, "j6": -0.5}),                         # proud
+                     (1, {"j7": 1}), (1, {"j7": 0}),
+                     (1.5, {"j2": 0, "j3": 0, "j4": 0, "j6": 0})],
+    "air_kiss":     [(1, {"j3": -0.5, "j6": -0.5, "j8": 0}),
+                     (1, {"j2": 0.35, "j4": 0.6, "j7": 1}),                   # lean in, pucker
+                     (0.3, {"j8": 2.5, "j6": -1}),                            # mwah
+                     (0.5, {"j8": 0}),
+                     (1.5, {"j2": -0.4, "j7": -1.2, "j6": 0.8}),              # shy, looks away
+                     (1.5, {"j2": 0, "j3": 0, "j6": 0, "j7": 0})],
+    "bow":          [(1, {"j3": -0.8}), (1.5, {"j2": 0.8, "j3": 1.5, "j6": 2}), (1.5, {}),
+                     (1.5, {"j2": 0, "j3": 0, "j6": 0})],
+    "dance":        [(0.5, {"j1": 1, "j6": 0.8, "j5": 0.8}), (0.5, {"j1": -1, "j6": -0.3, "j5": -0.8}),
+                     (0.5, {"j1": 1, "j6": 0.8, "j5": 0.8}), (0.5, {"j1": -1, "j6": -0.3, "j5": -0.8}),
+                     (0.5, {"j3": -1, "j7": 1.5, "j8": 2}), (0.5, {"j3": 0, "j7": -1.5, "j8": 0}),
+                     (0.5, {"j3": -1, "j7": 1.5, "j8": 2}), (0.5, {"j3": 0, "j7": -1.5, "j8": 0}),
+                     (1.5, {"j1": 0, "j5": 0, "j6": 0, "j7": 0})],
+    "sneeze":       [(0.8, {"j6": -1, "j8": 1}), (0.8, {"j6": -1.6, "j8": 1.8}),
+                     (0.9, {"j6": -2.2, "j3": -0.8, "j8": 2.6}), (0.5, {}),
+                     (0.25, {"j6": 2.2, "j3": 0.9, "j2": 0.3, "j8": 0.5}),    # achoo
+                     (1, {}), (0.4, {"j1": 0.6}), (0.4, {"j1": -0.6}),
+                     (1.5, {"j1": 0, "j2": 0, "j3": 0, "j6": 0, "j8": 0})],
+    "yawn_stretch": [(2, {"j3": -1.6, "j6": -2, "j8": 4}), (1.5, {"j5": 1.5, "j7": 1}),
+                     (1.5, {"j5": -1.5, "j7": -1}), (1, {"j5": 0, "j7": 0, "j8": 0}),
+                     (2, {"j3": 0.5, "j6": 0.8}), (1.5, {"j3": 0, "j6": 0})],
+    "peekaboo":     [(1.5, {"j1": 2.2, "j3": 1.5, "j6": 2}), (2, {}),          # hide
+                     (0.35, {"j1": 0, "j3": -1.5, "j6": -1.5, "j8": 3.5}),    # boo
+                     (0.4, {"j8": 0}), (0.3, {"j8": 3}), (0.4, {"j8": 0}),
+                     (1.5, {"j3": 0, "j6": 0})],
+    "sniff_flower": [(1, {"j6": 1}), (1.5, {"j2": 0.4, "j3": 1.2, "j6": 1.8}),
+                     (0.3, {"j6": 2.1}), (0.3, {"j6": 1.8}), (0.3, {"j6": 2.1}), (0.3, {"j6": 1.8}),
+                     (1.5, {"j2": -0.3, "j3": -1, "j6": -1.2, "j7": 1}),       # ahh
+                     (1, {"j7": -1}), (1, {"j7": 1}), (1.5, {"j2": 0, "j3": 0, "j6": 0, "j7": 0})],
+    "catch_ball":   [(1, {"j1": -1.5, "j6": -0.5}),                           # spots the throw
+                     (1, {"j1": -0.5, "j6": -1.2, "j8": 3}),                  # tracks it, mouth open
+                     (0.6, {"j1": 0.3, "j6": -0.8}),                          # catch
+                     (0.4, {"j8": 1.2}),                                      # chomp
+                     (1, {"j3": -1, "j6": -1.3}),                             # proud
+                     (0.5, {"j5": 1}), (0.5, {"j5": -1}),
+                     (1.5, {"j1": 0, "j3": 0, "j5": 0, "j6": 0})],
+    "think":        [(1.5, {"j6": -1.2, "j7": 1.2}), (1.5, {"j1": 1, "j6": -1.5}), (1.5, {"j1": -0.5}), (1, {}),
+                     (0.3, {"j3": -1, "j6": -0.5, "j7": 0, "j8": 2.5}),       # aha
+                     (0.6, {"j6": 0.6}), (0.6, {"j6": -0.4}),
+                     (1.5, {"j1": 0, "j3": 0, "j6": 0, "j8": 0})],
+    "celebrate":    [(0.4, {"j3": -1.5, "j6": -1.5, "j8": 3}), (0.3, {"j3": -0.8, "j8": 1}),
+                     (0.3, {"j3": -1.5, "j8": 3}), (0.3, {"j3": -0.8, "j8": 1}), (0.3, {"j3": -1.5, "j8": 3}),
+                     (0.6, {"j1": 1.5, "j5": 1}), (0.6, {"j1": -1.5, "j5": -1}),
+                     (1.5, {"j1": 0, "j3": 0, "j5": 0, "j6": 0, "j8": 0})],
+    "nod_off":      [(2, {"j3": 0.8, "j6": 1}), (2, {"j3": 1.5, "j6": 2, "j8": 1}),
+                     (0.2, {"j3": -0.5, "j6": -0.8, "j8": 0}),                # jolts awake
+                     (1, {"j1": 0.6}), (1, {"j1": -0.6}), (1.5, {"j1": 0, "j3": 0, "j6": 0})],
+    "scared":       [(1, {"j6": 1.5}),                                        # notices a spider
+                     (0.25, {"j2": -0.4, "j3": -1.2, "j6": -2.2, "j8": 3.5}),  # recoils
+                     (0.15, {"j6": -1.6}), (0.15, {"j6": -2}), (0.15, {"j6": -1.6}), (0.15, {"j6": -2}),
+                     (2, {"j1": -1.5, "j8": 0}), (2, {"j1": 0, "j2": 0, "j3": 0, "j6": 0})],
+}
+GESTURES.update(SCENES)
+
+# Props the viewer draws for some scenes, tied to the start time of a keyframe (index into the scene).
+PROPS: dict[str, dict] = {
+    "kick_ball":    {"type": "kick", "at": 3},
+    "put_on_hat":   {"type": "hat", "grab": 4, "toss": 7, "land": 8},
+    "air_kiss":     {"type": "heart", "at": 3},
+    "sniff_flower": {"type": "flower", "at": 2},
+    "catch_ball":   {"type": "catch", "at": 3},
+    "scared":       {"type": "spider", "at": 1},
+}
+
 
 @dataclass
 class Step:
@@ -127,6 +217,7 @@ class Step:
     acc: dict[str, int]
     speed: dict[str, int]
     wait_arrival: bool = False        # bound flow: wait until joints arrive before the next step
+    key: int = -1                     # index of the keyframe this step starts (for props and timing)
 
 
 def _settings(p: Personality, joints) -> tuple[dict[str, int], dict[str, int]]:
@@ -158,7 +249,8 @@ def _smooth_plan(p: Personality, gesture: str, neutral: dict[str, float], rate_h
     acc, speed = _settings(p, JOINTS)
     cur, t, steps = dict(base), 0.0, []
     keys = [(b, offs) for b, offs in GESTURES[gesture]] + [(1.5, {j: 0.0 for j in JOINTS})]
-    for beats, offs in keys:
+    for ki, (beats, offs) in enumerate(keys):
+        first = len(steps)
         dur = beats * p.tempo
         target = dict(cur)
         for j, o in offs.items():
@@ -170,6 +262,8 @@ def _smooth_plan(p: Personality, gesture: str, neutral: dict[str, float], rate_h
             goals = {j: cur[j] + (target[j] - cur[j]) * f for j in moved}
             if goals or k == n:
                 steps.append(Step(t + k / rate_hz, goals, acc, speed))
+        if ki < len(keys) - 1 and len(steps) > first:
+            steps[first].key = ki
         t += n / rate_hz
         cur = target
     steps.append(Step(t, {j: base[j] for j in JOINTS}, acc, speed, wait_arrival=True))
@@ -187,7 +281,8 @@ def plan(p: Personality | str, gesture: str, neutral: dict[str, float] | None = 
     base = stance(p, neutral)
     cur = dict(base)
     t, steps = 0.0, []
-    for beats, offs in GESTURES[gesture]:
+    for ki, (beats, offs) in enumerate(GESTURES[gesture]):
+        first = len(steps)
         dur = beats * p.tempo
         target = dict(cur)
         for j, o in offs.items():
@@ -209,6 +304,7 @@ def plan(p: Personality | str, gesture: str, neutral: dict[str, float] | None = 
             for j in ("j6", "j7"):
                 goals[j] = _clamp(j, neutral, target[j] + rng.uniform(-p.tremor, p.tremor))
         steps.append(Step(t, goals, acc, speed, wait_arrival=p.blend == 0.0 and bool(moved)))
+        steps[first].key = ki
         t += dur * (1.0 - p.blend) if p.blend else dur
         cur = target
     steps.append(Step(t, {j: base[j] for j in JOINTS}, *_settings(p, JOINTS), wait_arrival=True))
