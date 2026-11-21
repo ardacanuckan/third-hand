@@ -1,5 +1,5 @@
 diff --git a/software/ai/smolvla_py/scripts/train.py b/software/ai/smolvla_py/scripts/train.py
-index 84e1e0e..2688bc4 100644
+index 84e1e0e..faf5c65 100644
 --- a/software/ai/smolvla_py/scripts/train.py
 +++ b/software/ai/smolvla_py/scripts/train.py
 @@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
@@ -19,7 +19,7 @@ index 84e1e0e..2688bc4 100644
      p.add_argument("--batch-size", type=int, default=8)
      p.add_argument("--lr", type=float, default=1e-4)
      p.add_argument("--weight-decay", type=float, default=1e-10)
-@@ -121,31 +122,35 @@ def main() -> None:
+@@ -121,31 +122,36 @@ def main() -> None:
      args = parse_args()
      torch.manual_seed(args.seed)
  
@@ -47,7 +47,8 @@ index 84e1e0e..2688bc4 100644
      # flow_matching upcasts the final head to float32 before the loss. On older
      # GPUs without bf16 (V100/T4/P100), this silently no-ops and we stay in fp32.
 -    use_bf16 = torch.cuda.is_bf16_supported()
-+    use_bf16 = on_cuda and torch.cuda.is_bf16_supported()
++    # bf16 autocast reconciles the bf16 backbone with fp32 layers; CPU supports it too (smoke tests)
++    use_bf16 = torch.cuda.is_bf16_supported() if on_cuda else device.type == "cpu"
      print(
 -        f"GPU: {torch.cuda.get_device_name(0)} | "
 -        f"bf16 autocast: {'on' if use_bf16 else 'off (GPU lacks bf16, using fp32)'}"
@@ -64,7 +65,7 @@ index 84e1e0e..2688bc4 100644
  
      stats = compute_stats(train_ds._state, train_ds._action)
      stats_path = args.output / "stats.safetensors"
-@@ -161,8 +166,8 @@ def main() -> None:
+@@ -161,8 +167,8 @@ def main() -> None:
          args.base_checkpoint,
          config_overrides={
              "image_keys": list(IMAGE_KEYS),
@@ -75,7 +76,7 @@ index 84e1e0e..2688bc4 100644
              "load_vlm_weights": False,
              "empty_cameras": 0,
          },
-@@ -203,7 +208,7 @@ def main() -> None:
+@@ -203,7 +209,7 @@ def main() -> None:
              if step >= args.steps:
                  break
              batch = build_train_batch(raw_batch, policy, stats, device)
