@@ -1,0 +1,403 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Third Hand Platform",
+    "output": "architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      880,
+      1100
+    ],
+    "views": [
+      {
+        "id": "voice-to-arm",
+        "label": "Voice to arm",
+        "focus": [
+          "person",
+          "voice",
+          "claude",
+          "mcp",
+          "hub",
+          "robotmod",
+          "station",
+          "arm"
+        ],
+        "note": "One spoken sentence becomes a bounded, taught motion on the follower arm."
+      },
+      {
+        "id": "eyes",
+        "label": "Eyes",
+        "focus": [
+          "hub",
+          "vision",
+          "claudeapi"
+        ],
+        "note": "Cup and joint checks run in the Hub with few-shot photos; Claude also gets a thumbnail."
+      },
+      {
+        "id": "audience",
+        "label": "What the audience sees",
+        "focus": [
+          "hub",
+          "build",
+          "screens"
+        ],
+        "note": "Build state and every event stream to the bench screen, dashboard and AR overlay."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "person",
+      "type": "external",
+      "label": "Person at the bench",
+      "sublabel": "holds the iron, talks",
+      "pos": [
+        355,
+        30
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "BENCH"
+    },
+    {
+      "id": "voice",
+      "type": "frontend",
+      "label": "Voice",
+      "sublabel": "push-to-talk STT",
+      "pos": [
+        355,
+        160
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "SCREEN"
+    },
+    {
+      "id": "claude",
+      "type": "backend",
+      "label": "Claude Code",
+      "sublabel": "agent",
+      "pos": [
+        355,
+        290
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "BRAIN"
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP server",
+      "sublabel": "thin adapter · stdio",
+      "pos": [
+        355,
+        420
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "BRAIN"
+    },
+    {
+      "id": "hub",
+      "type": "backend",
+      "label": "Hub",
+      "sublabel": "FastAPI :7100",
+      "pos": [
+        355,
+        550
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "BRAIN"
+    },
+    {
+      "id": "robotmod",
+      "type": "security",
+      "label": "Robot module",
+      "sublabel": "poses · skills · e-stop",
+      "pos": [
+        40,
+        700
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "ARM"
+    },
+    {
+      "id": "vision",
+      "type": "backend",
+      "label": "Vision checks",
+      "sublabel": "cup · joints",
+      "pos": [
+        250,
+        700
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "BRAIN"
+    },
+    {
+      "id": "build",
+      "type": "database",
+      "label": "Build session",
+      "sublabel": "runs/*/events.jsonl",
+      "pos": [
+        460,
+        700
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "BRAIN"
+    },
+    {
+      "id": "screens",
+      "type": "frontend",
+      "label": "Screens",
+      "sublabel": "bench · dashboard · AR",
+      "pos": [
+        670,
+        700
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "SCREEN"
+    },
+    {
+      "id": "station",
+      "type": "backend",
+      "label": "Station",
+      "sublabel": "NormaCore :8888",
+      "pos": [
+        40,
+        850
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "ARM"
+    },
+    {
+      "id": "arm",
+      "type": "external",
+      "label": "ElRobot + cameras",
+      "sublabel": "8× ST3215 · side, wrist",
+      "pos": [
+        40,
+        1000
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "tag": "ARM"
+    },
+    {
+      "id": "claudeapi",
+      "type": "cloud",
+      "label": "Claude API",
+      "sublabel": "vision classifiers",
+      "pos": [
+        250,
+        1000
+      ],
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Bench laptop",
+      "wraps": [
+        "voice",
+        "claude",
+        "mcp",
+        "hub",
+        "robotmod",
+        "vision",
+        "build",
+        "screens",
+        "station"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "speaks",
+      "from": "person",
+      "to": "voice",
+      "label": "speaks",
+      "variant": "emphasis",
+      "labelAt": [
+        440,
+        127
+      ]
+    },
+    {
+      "id": "text",
+      "from": "voice",
+      "to": "claude",
+      "label": "text",
+      "variant": "emphasis",
+      "labelAt": [
+        440,
+        257
+      ]
+    },
+    {
+      "id": "tools",
+      "from": "claude",
+      "to": "mcp",
+      "label": "tool calls",
+      "variant": "emphasis",
+      "labelAt": [
+        440,
+        387
+      ]
+    },
+    {
+      "id": "http",
+      "from": "mcp",
+      "to": "hub",
+      "label": "HTTP",
+      "variant": "emphasis",
+      "labelAt": [
+        440,
+        517
+      ]
+    },
+    {
+      "id": "motion",
+      "from": "hub",
+      "to": "robotmod",
+      "label": "fetch · pose",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "checks",
+      "from": "hub",
+      "to": "vision",
+      "label": "checks",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "state",
+      "from": "hub",
+      "to": "build",
+      "label": "state",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "events",
+      "from": "hub",
+      "to": "screens",
+      "label": "WebSocket",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "normfs",
+      "from": "robotmod",
+      "to": "station",
+      "label": "normfs",
+      "variant": "emphasis",
+      "labelAt": [
+        125,
+        807
+      ]
+    },
+    {
+      "id": "servo-bus",
+      "from": "station",
+      "to": "arm",
+      "label": "USB servo bus",
+      "variant": "emphasis",
+      "labelAt": [
+        125,
+        957
+      ]
+    },
+    {
+      "id": "few-shot",
+      "from": "vision",
+      "to": "claudeapi",
+      "label": "few-shot",
+      "variant": "dashed",
+      "labelAt": [
+        335,
+        882
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Claude's tools",
+      "items": [
+        "next_step, show_footprint, fetch_part",
+        "look, inspect, mark_joint, mark_placed",
+        "speak, status, go_pose (recovery)",
+        "No free joint-move tool"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "The Hub keeps",
+      "items": [
+        "Station connection and motion lock",
+        "Build session across Claude restarts",
+        "Screen state, speech out, event log",
+        "FakeRobot backend for work without the arm"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Safety layers",
+      "items": [
+        "Station current limit per servo",
+        "elrobot.py clamps and small steps",
+        "Hub: one motion at a time, e-stop",
+        "A person at the power switch"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Owners",
+      "items": [
+        "ARM: robot module, Station, poses",
+        "BRAIN: agent, MCP, Hub, vision",
+        "SCREEN: voice and the three screens",
+        "BENCH: board, bench, pitch"
+      ]
+    }
+  ]
+}

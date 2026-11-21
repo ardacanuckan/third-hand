@@ -6,7 +6,12 @@ A browser simulation of the whole planned demo: the real ElRobot model (URDF and
 python3 -m http.server 8000
 ```
 
-Open http://localhost:8000. Views: Bench, Board, Robot, Screen. The left-hand picture shows what Claude sees (side or wrist camera).
+Open http://localhost:8000. Views: Bench, Board, Robot, Screen. The left-hand picture shows what Claude sees (overhead table camera or wrist camera).
+
+Two scenarios:
+
+- **Build the board**: the full demo, five parts, joint inspection, power-up.
+- **Cup moved** (`?scenario=moved`): the LED cup is put down somewhere new. `look_table` numbers every cup it sees, Claude picks the number, and `pick(n)` hovers over the table camera's estimate, lets the wrist camera centre the cup, grips, checks j8 and hands it over. No motion is recorded for the cups. `?spot=0..3` fixes the spot; otherwise it is random.
 
 Files:
 

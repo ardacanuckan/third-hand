@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Picking a Cup From Anywhere",
+    "output": "pick-process.html",
+    "viewBox": [1000, 1080],
+    "column_fit": "spread",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "look-and-choose",
+        "label": "Look and choose",
+        "focus": ["person", "claude", "hub", "tablecam"],
+        "note": "The table camera finds every cup; Claude picks one by its number."
+      },
+      {
+        "id": "reach-and-align",
+        "label": "Reach and align",
+        "focus": ["hub", "wristcam", "arm"],
+        "note": "IK puts the gripper above the cup; the wrist camera closes the last centimetres."
+      },
+      {
+        "id": "grip-and-verify",
+        "label": "Grip and verify",
+        "focus": ["claude", "hub", "arm", "person"],
+        "note": "The jaw servo says whether it holds; the table camera confirms the handover."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "person", "type": "external", "label": "Person", "sublabel": "at the bench" },
+    { "id": "claude", "type": "cloud", "label": "Claude", "sublabel": "decides" },
+    { "id": "hub", "type": "backend", "label": "Hub", "sublabel": "local code" },
+    { "id": "tablecam", "type": "frontend", "label": "Table camera", "sublabel": "rough ±1–2 cm" },
+    { "id": "wristcam", "type": "frontend", "label": "Wrist camera", "sublabel": "fine ±2–3 mm" },
+    { "id": "arm", "type": "external", "label": "ElRobot arm", "sublabel": "follower" }
+  ],
+  "segments": [
+    { "from": 160, "to": 410, "label": "Look" },
+    { "from": 426, "to": 478, "label": "Choose" },
+    { "from": 494, "to": 664, "label": "Reach and align" },
+    { "from": 680, "to": 980, "label": "Grip and hand over" }
+  ],
+  "messages": [
+    { "from": "person", "to": "claude", "y": 180, "label": "\"Bring me the LED\"", "variant": "emphasis" },
+    { "from": "claude", "to": "hub", "y": 222, "label": "look_table()", "variant": "emphasis" },
+    { "from": "hub", "to": "arm", "y": 264, "label": "park, clear the view", "variant": "default" },
+    { "from": "hub", "to": "tablecam", "y": 306, "label": "grab frame", "variant": "default" },
+    { "from": "tablecam", "to": "hub", "y": 348, "label": "frame", "variant": "return" },
+    { "from": "hub", "to": "claude", "y": 390, "label": "numbered cups + mm", "variant": "return", "note": "YOLO-World boxes; bottom-centre pixel → table mm" },
+    { "from": "claude", "to": "hub", "y": 452, "label": "pick(2)", "variant": "emphasis", "note": "#2 has the LED label" },
+    { "from": "hub", "to": "arm", "y": 514, "label": "hover 8 cm above (265, 40)", "variant": "emphasis", "note": "IK + workspace box + hand zone" },
+    { "from": "hub", "to": "wristcam", "y": 556, "label": "look down", "variant": "default" },
+    { "from": "wristcam", "to": "hub", "y": 598, "label": "18 mm off centre", "variant": "return" },
+    { "from": "hub", "to": "arm", "y": 640, "label": "nudge, look again", "variant": "dashed", "note": "until it matches the taught grasp view" },
+    { "from": "hub", "to": "arm", "y": 702, "label": "descend, close jaws", "variant": "emphasis" },
+    { "from": "arm", "to": "hub", "y": 744, "label": "j8 stopped half-way", "variant": "return", "note": "fully closed = missed, pick again" },
+    { "from": "hub", "to": "arm", "y": 786, "label": "lift to handover point", "variant": "emphasis" },
+    { "from": "hub", "to": "claude", "y": 828, "label": "gripped, 6 s + thumbnail", "variant": "return" },
+    { "from": "claude", "to": "hub", "y": 870, "label": "look_table()", "variant": "default" },
+    { "from": "hub", "to": "claude", "y": 912, "label": "cup at handover", "variant": "return" },
+    { "from": "claude", "to": "person", "y": 954, "label": "\"LED cup is in front of you\"", "variant": "emphasis" }
+  ],
+  "activations": [
+    { "participant": "claude", "from": 174, "to": 960, "type": "cloud" },
+    { "participant": "hub", "from": 216, "to": 918, "type": "backend" },
+    { "participant": "tablecam", "from": 300, "to": 354, "type": "frontend" },
+    { "participant": "wristcam", "from": 550, "to": 604, "type": "frontend" },
+    { "participant": "arm", "from": 258, "to": 792, "type": "external" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Two eyes",
+      "items": [
+        "Table camera finds the cup anywhere on the bench",
+        "Wrist camera centres it between the jaws",
+        "One calibration maps table pixels to mm"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "When it goes wrong",
+      "items": [
+        "Cup not found: park, look again, then ask",
+        "Jaws fully closed: missed, pick again",
+        "Beyond ~430 mm: Hub refuses, Claude asks to move it closer",
+        "Two look alike: wrist camera looks inside, or Claude asks \"#2 or #3?\""
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Who decides what",
+      "items": [
+        "Claude: which cup, where to, did it work",
+        "Hub: detection, IK, safety, alignment loop",
+        "Arm: only bounded moves inside the workspace"
+      ]
+    }
+  ]
+}

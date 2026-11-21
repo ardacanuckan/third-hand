@@ -133,6 +133,17 @@
   .det span { position: absolute; left: -1.5px; top: -18px; font: 10.5px var(--mono); padding: 1px 5px; background: var(--mask); color: #08130c; white-space: nowrap; border-radius: 3px 3px 3px 0; }
   .det.bad { border-color: var(--bad); } .det.bad span { background: var(--bad); color: #1a0705; }
   .det.warn { border-color: var(--warn); } .det.warn span { background: var(--warn); color: #1a1205; }
+  .det.sel { border-color: var(--copper); border-width: 2px; } .det.sel span { background: var(--copper); color: #1a1008; }
+  .det.dim { border-color: #9fb3c4; border-style: dashed; } .det.dim span { background: #9fb3c4; color: #0b1116; }
+  .det[hidden] { display: none; }
+  .det.below span { top: auto; bottom: -18px; border-radius: 0 3px 3px 3px; }
+  .pip.small .det.dim span { display: none; }
+  /* where the jaws will close, drawn on the wrist camera during alignment */
+  .cross { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; }
+  .cross::before, .cross::after { content: ""; position: absolute; background: var(--copper); }
+  .cross::before { left: 12px; top: 0; width: 2px; height: 26px; }
+  .cross::after { top: 12px; left: 0; height: 2px; width: 26px; }
+  .cross[hidden] { display: none; }
   .hint { position: absolute; right: 14px; bottom: 12px; font: 11px var(--mono); color: var(--muted); pointer-events: none; }
   @media (max-width: 620px) { .hint { display: none; } }
   .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 13px var(--mono); background: var(--bg); }
@@ -145,7 +156,7 @@
     <canvas id="c" aria-label="3D view of the ElRobot arm on a soldering bench"></canvas>
     <div class="caption" id="caption" hidden><span class="who" id="capWho"></span><span id="capTxt"></span></div>
     <div class="tele" id="tele"><div class="hd"><span>st3215/inference</span><span id="teleHz">20 Hz</span></div><div id="teleRows"></div></div>
-    <div class="pip" id="pip"><div class="lab"><span class="rec" id="pipName">SIDE CAM</span><span id="pipQueue">usbvideo/3f9a…</span></div><div class="det" id="det" hidden><span id="detTxt"></span></div></div>
+    <div class="pip" id="pip"><div class="lab"><span class="rec" id="pipName">TABLE CAM</span><span id="pipQueue">usbvideo/3f9a…</span></div><div id="dets"></div><div class="cross" id="cross" hidden></div></div>
     <div class="hint" data-i18n="hint">drag to orbit · scroll to zoom</div>
     <div class="loading" id="loading">Loading ElRobot model…</div>
   </main>
@@ -162,6 +173,12 @@
     <div class="status"><span class="pill" id="pill">idle</span><span class="meta" id="stepMeta">0 / 5</span><span class="meta" id="clock">t = 0.0 s</span></div>
 
     <section class="controls">
+      <div class="row">
+        <span class="meta" data-i18n="scenL">Scenario</span>
+        <div class="seg" role="group" aria-label="Scenario" id="scenSeg">
+          <button data-sc="build" aria-pressed="true" data-i18n="scBuild">Build the board</button><button data-sc="moved" aria-pressed="false" data-i18n="scMoved">Cup moved</button>
+        </div>
+      </div>
       <div class="row">
         <button class="btn primary" id="run" data-i18n="run">Run demo</button>
         <button class="btn" id="pause" data-i18n="pause">Pause</button>
@@ -189,10 +206,12 @@
     </section>
 
     <section>
-      <h2 data-i18n="seq"></h2>
+      <h2 id="seqH"></h2>
       <ol class="steps" id="steps"></ol>
-      <p class="formula">12 V → J2 → D2 → VIN (C4, C13) → U1 7805 → 5 V → R1 → D1</p>
-      <p class="formula" data-i18n="prefit"></p>
+      <div id="formulas">
+        <p class="formula">12 V → J2 → D2 → VIN (C4, C13) → U1 7805 → 5 V → R1 → D1</p>
+        <p class="formula" data-i18n="prefit"></p>
+      </div>
     </section>
 
     <section>
@@ -201,7 +220,7 @@
     </section>
 
     <details class="teach" id="teach" open>
-      <summary data-i18n="teachH">How the robot learns this (no model training)</summary>
+      <summary id="teachSum">How the robot learns this (no model training)</summary>
       <ol id="teachList"></ol>
     </details>
 
@@ -234,7 +253,26 @@ const T = {
     sub: "A voice-driven soldering assistant on NormaCore's ElRobot, populating the power stage of a fresh SOL-MIO v1.3 board. Claude sees through the cameras, fetches each part, lights up its footprint on the bench screen and checks your joints. You hold the iron.",
     prefit: 'Fitted beforehand: U1 (7805) and J2 (DC jack). Through-hole parts are soldered from the underside.',
     run: 'Run demo', pause: 'Pause', resume: 'Resume', reset: 'Reset', speed: 'Speed', viewL: 'View', vBench: 'Bench', vBoard: 'Board', vRobot: 'Robot', vScreen: 'Screen', screenH: 'Bench screen',
-    miss: 'Miss the grip once (step 2) to show self-correction', poses: 'Show taught poses',
+    miss: 'Miss the grip once to show self-correction', poses: 'Show taught poses',
+    scenL: 'Scenario', scBuild: 'Build the board', scMoved: 'Cup moved',
+    seqMoved: 'Pick from anywhere · the LED cup was moved',
+    teachHMoved: 'How it finds and picks a moved cup (no model training)',
+    teachMoved: [
+      '<b>Calibrate the table camera once.</b> Send the arm tip to 4–6 points on the mat and click each one in the image. From then on every table pixel maps to millimetres in the robot frame.',
+      '<b>Show the grasp once with the leader arm.</b> Station mirrors the leader onto the follower. When the jaws close, the Hub stores the wrist-camera view: where the cup sits in the image and how big it is.',
+      '<b>Teach places, not paths.</b> Leader to the handover spot, "this is the handover". Nothing is recorded for the cups: their positions come from the table camera every time.',
+      '<b>Claude decides, the Hub moves.</b> <code>look_table</code> returns a numbered image and a list in mm. Claude picks a number. <code>pick(n)</code> runs IK, the safety checks and the wrist-camera alignment.',
+      '<b>Check every result.</b> j8 stopping half-way means the cup is held; closing all the way means a miss. The table camera confirms the cup reached the handover zone.',
+    ],
+    mSteps: {
+      look: ['Look', 'table camera finds and numbers every cup'],
+      choose: ['Choose', 'Claude reads the numbered image'],
+      reach: ['Reach', 'IK to 8 cm above the estimate'],
+      align: ['Align', 'wrist camera centres the cup'],
+      grip: ['Grip', 'j8 stops half-way = holding'],
+      hand: ['Hand over', 'table camera confirms'],
+    },
+    mSt: { wait: 'waiting', active: 'running', ok: 'done', warn: 'retry' },
     seq: 'Build sequence · SOL-MIO v1.3 power stage', log: 'Voice and tool calls', hint: 'drag to orbit · scroll to zoom',
     teachH: 'How the robot learns this (no model training)',
     foot: 'Robot: ElRobot follower URDF and meshes from <a href="https://github.com/norma-core/norma-core" target="_blank" rel="noopener">norma-core</a>, posed with IK on its real joint chain and limits. Board: SOL-MIO v1.3 outline and part positions from its Altium project (Muscle_MB2). Bench, parts and timings simulate the planned demo.',
@@ -255,7 +293,26 @@ const T = {
     sub: "NormaCore ElRobot üzerinde sesle çalışan lehim asistanı, yeni bir SOL-MIO v1.3 kartının güç bölümünü diziyor. Claude kameralardan bakar, her parçayı getirir, yerini masa ekranında aydınlatır ve lehimini kontrol eder. Havya sende.",
     prefit: 'Önceden takılı: U1 (7805) ve J2 (DC jak). Delikli (THT) parçalar alttan lehimlenir.',
     run: 'Demoyu oynat', pause: 'Duraklat', resume: 'Devam', reset: 'Sıfırla', speed: 'Hız', viewL: 'Görünüm', vBench: 'Masa', vBoard: 'Kart', vRobot: 'Robot', vScreen: 'Ekran', screenH: 'Masa ekranı',
-    miss: 'Kendini düzeltmeyi göstermek için 2. adımda kavramayı bir kez kaçır', poses: 'Öğretilen pozları göster',
+    miss: 'Kendini düzeltmeyi göstermek için kavramayı bir kez kaçır', poses: 'Öğretilen pozları göster',
+    scenL: 'Senaryo', scBuild: 'Kartı diz', scMoved: 'Kap yer değiştirdi',
+    seqMoved: 'Her yerden alma · LED kabının yeri değişti',
+    teachHMoved: 'Yeri değişen kabı nasıl bulup alıyor (model eğitimi yok)',
+    teachMoved: [
+      '<b>Masa kamerasını bir kez kalibre et.</b> Kolun ucunu matta 4-6 noktaya götür, her birini görüntüde tıkla. Bundan sonra masadaki her piksel robotun koordinatlarında milimetreye çevrilir.',
+      '<b>Tutuşu leader kolla bir kez göster.</b> Station leader\'ı follower\'a aynalar. Çeneler kapandığı an Hub bilek kamerası görüntüsünü kaydeder: kap görüntüde nerede ve ne büyüklükte.',
+      '<b>Yol değil yer öğret.</b> Leader\'la teslim noktasına git, "burası teslim noktası" de. Kaplar için hiçbir şey kaydedilmez: yerleri her seferinde masa kamerasından gelir.',
+      '<b>Claude karar verir, Hub hareket ettirir.</b> <code>look_table</code> numaralı görüntü ve mm cinsinden bir liste döner. Claude bir numara seçer. <code>pick(n)</code> IK\'yı, güvenlik kontrollerini ve bilek kamerasıyla hizalamayı yapar.',
+      '<b>Her sonucu kontrol et.</b> j8 yarıda durduysa kap tutuldu, sonuna kadar kapandıysa kaçırdı. Masa kamerası kabın teslim alanına geldiğini doğrular.',
+    ],
+    mSteps: {
+      look: ['Bak', 'masa kamerası her kabı bulup numaralar'],
+      choose: ['Seç', 'Claude numaralı görüntüyü okur'],
+      reach: ['Uzan', 'tahminin 8 cm üstüne IK ile'],
+      align: ['Hizala', 'bilek kamerası kabı ortalar'],
+      grip: ['Tut', 'j8 yarıda durdu = tutuyor'],
+      hand: ['Teslim et', 'masa kamerası doğrular'],
+    },
+    mSt: { wait: 'sırada', active: 'çalışıyor', ok: 'tamam', warn: 'tekrar' },
     seq: 'Montaj sırası · SOL-MIO v1.3 güç bölümü', log: 'Ses ve araç çağrıları', hint: 'sürükle: döndür · tekerlek: yakınlaş',
     teachH: 'Robot bunu nasıl öğreniyor (model eğitimi yok)',
     foot: 'Robot: ElRobot follower URDF ve mesh dosyaları <a href="https://github.com/norma-core/norma-core" target="_blank" rel="noopener">norma-core</a> reposundan; gerçek eklem zinciri ve limitleriyle IK ile hareket ettiriliyor. Kart: SOL-MIO v1.3 dış hatları ve parça yerleri Altium projesinden (Muscle_MB2). Masa, parçalar ve süreler planlanan demonun simülasyonu.',
@@ -273,12 +330,15 @@ const T = {
     cup: 'kap',
   },
 };
-let lang = 'en';
+let lang = 'en', scen = 'build';
 const t = (k) => T[lang][k] ?? T.en[k];
+const say = (o) => o[lang] ?? o.en;
 function applyLang() {
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-html]').forEach((el) => { el.innerHTML = t(el.dataset.i18nHtml); });
-  $('teachList').innerHTML = t('teach').map((s) => `<li>${s}</li>`).join('');
+  $('teachSum').textContent = t(scen === 'moved' ? 'teachHMoved' : 'teachH');
+  $('teachList').innerHTML = t(scen === 'moved' ? 'teachMoved' : 'teach').map((s) => `<li>${s}</li>`).join('');
+  $('scenSeg').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x.dataset.sc === scen));
   $('lang-en').setAttribute('aria-pressed', lang === 'en'); $('lang-tr').setAttribute('aria-pressed', lang === 'tr');
   $('pause').textContent = paused ? t('resume') : t('pause');
   renderSteps(); setPill(status);
@@ -392,18 +452,18 @@ wristCam.position.copy(camLocalPos).addScaledVector(camLocalLook.clone().sub(cam
 wristCam.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(camLocalPos, camLocalLook, V(0, 0, 1)));
 GB.add(wristCam);
 
-/* side camera on a small tripod */
-const sideCam = new THREE.PerspectiveCamera(48, 4 / 3, 0.01, 4);
+/* table camera, overhead on a boom clamped to the bench */
+const sideCam = new THREE.PerspectiveCamera(50, 4 / 3, 0.01, 4);
 sideCam.position.fromArray(LAYOUT.sideCam.pos); sideCam.lookAt(V(...LAYOUT.sideCam.look));
 {
-  const g = new THREE.Group(); const p = LAYOUT.sideCam.pos;
-  const legM = matStd('#2b3036', 0.5, 0.5);
-  for (let i = 0; i < 3; i++) {
-    const a = i * 2.094 + 0.4, foot = V(p[0] + Math.cos(a) * 0.07, p[1] + Math.sin(a) * 0.07, 0);
-    const top = V(p[0], p[1], p[2] - 0.03), dir = top.clone().sub(foot);
-    const leg = mesh(new THREE.CylinderGeometry(0.0025, 0.003, dir.length(), 8), legM);
-    leg.position.copy(foot).addScaledVector(dir, 0.5); leg.quaternion.setFromUnitVectors(V(0, 1, 0), dir.normalize()); g.add(leg);
-  }
+  const g = new THREE.Group(); const p = LAYOUT.sideCam.pos, [px, py] = LAYOUT.sideCam.pole, top = p[2] + 0.03;
+  const poleM = matStd('#2b3036', 0.5, 0.5);
+  const pole = mesh(new THREE.CylinderGeometry(0.006, 0.006, top, 12), poleM); pole.rotation.x = Math.PI / 2; pole.position.set(px, py, top / 2); g.add(pole);
+  const clamp = mesh(new THREE.BoxGeometry(0.05, 0.04, 0.012), poleM); clamp.position.set(px, py, 0.006); g.add(clamp);
+  const boomLen = Math.hypot(px - p[0], py - p[1]);
+  const boom = mesh(new THREE.CylinderGeometry(0.005, 0.005, boomLen, 10), poleM);
+  boom.position.set((px + p[0]) / 2, (py + p[1]) / 2, top); boom.quaternion.setFromUnitVectors(V(0, 1, 0), V(p[0] - px, p[1] - py, 0).normalize()); g.add(boom);
+  const drop = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.02, 8), poleM); drop.rotation.x = Math.PI / 2; drop.position.set(p[0], p[1], top - 0.01); g.add(drop);
   const body = new THREE.Group();
   body.add(mesh(new THREE.BoxGeometry(0.07, 0.03, 0.03), matStd('#1b1f24', 0.45, 0.2)));
   const l = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 24), matStd('#0a0c0e', 0.12, 0.7)); l.rotation.x = Math.PI / 2; l.position.z = 0.019; body.add(l);
@@ -589,14 +649,25 @@ tray.position.set(LAYOUT.tray.center[0], LAYOUT.tray.center[1], 0.003); bench.ad
 const cupProfile = [V(0, 0, 0), V(0.0108, 0, 0), V(0.0118, 0.0015, 0), V(LAYOUT.tray.cupR, LAYOUT.tray.cupH, 0), V(LAYOUT.tray.cupR - 0.0008, LAYOUT.tray.cupH, 0), V(0.0111, 0.0025, 0), V(0, 0.0025, 0)].map((v) => new THREE.Vector2(v.x, v.y));
 const cupGeo = new THREE.LatheGeometry(cupProfile, 40); cupGeo.rotateX(Math.PI / 2);
 const cups = {};
+const CUP_LABEL = { D1: 'LED' };
+const labelTexCache = {};
+function cupLabelTex(text) {
+  return labelTexCache[text] ??= canvasTex(1024, 64, (g, w, h) => {
+    g.fillStyle = '#dd8d4e'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1a1008'; g.font = '700 46px "IBM Plex Mono", monospace'; g.textAlign = 'center';
+    for (const x of [0.125, 0.375, 0.625, 0.875]) g.fillText(text, x * w, 49);
+  });
+}
 function resetCups() {
   for (const c of Object.values(cups)) c.group.removeFromParent();
   for (const p of PARTS) {
     const g = new THREE.Group();
     const m = new THREE.MeshStandardMaterial({ color: '#e4e9ee', roughness: 0.32, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     g.add(mesh(cupGeo, m));
-    const band = mesh(new THREE.CylinderGeometry(LAYOUT.tray.cupR * 0.985, LAYOUT.tray.cupR * 0.93, 0.005, 40, 1, true), matStd('#dd8d4e', 0.5, 0, { side: THREE.DoubleSide }));
-    band.rotation.x = Math.PI / 2; band.position.z = 0.02; g.add(band);
+    // a written label on the band ("LED", "R1", ...): plain text the table camera and Claude can read, not a fiducial tag
+    const band = mesh(new THREE.CylinderGeometry(LAYOUT.tray.cupR * 0.99, LAYOUT.tray.cupR * 0.95, 0.007, 40, 1, true),
+      matStd('#ffffff', 0.5, 0, { side: THREE.DoubleSide, map: cupLabelTex(CUP_LABEL[p.ref] ?? p.ref) }));
+    band.rotation.x = Math.PI / 2; band.position.z = 0.0195; g.add(band);
     const content = new THREE.Group();
     const n = ['to220', 'jack', 'vchip'].includes(p.kind) ? 1 : 6;
     for (let i = 0; i < n; i++) {
@@ -724,6 +795,14 @@ const DOWN = V(0, 0, -1);
 const HOME = arm.solve(V(0, 0.15, 0.13), V(0, 0.6, -1).normalize(), JOINTS.map(() => 0), null, 0.06).q;
 HOME[7] = OPEN;
 const PARK = arm.solve(V(-0.12, 0.09, 0.1), V(0, 0, -1), HOME, HOME, 0.04).q; // over the tray, clear of the iron
+// Before the table camera looks, the arm swivels its base so it hangs over empty mat to the right, clear of cups, tray and board.
+const CLEAR = (() => {
+  for (const s of [-1, 1]) {
+    const q = HOME.slice(); q[0] = Math.min(arm.lim[0][1], Math.max(arm.lim[0][0], HOME[0] + s * 1.2));
+    if (arm.fk(q).tip.x > 0.08) return q;
+  }
+  return PARK;
+})();
 const park = () => moveArm(PARK);
 const ik = (p, w = 0.12, axis = DOWN) => arm.solve(p, axis, cur, HOME, w).q;
 function moveArm(q1, slow = 1) {
@@ -737,19 +816,33 @@ const goHome = (slow = 1) => moveArm(HOME, slow);
 const padWorld = (x, y, dz = 0) => pcb.localToWorld(V((x - OX) / 1000, (y - OY) / 1000, BT + dz));
 
 /* camera feed shown in the picture-in-picture */
-let pipCam = sideCam, det = null;
+let pipCam = sideCam, dets = [], aimZ = null; // aimZ: height where the jaw axis is marked on the wrist camera
 function setPip(which) {
   pipCam = which === 'wrist' ? wristCam : sideCam;
-  $('pipName').textContent = which === 'wrist' ? 'WRIST CAM' : 'SIDE CAM';
+  $('pipName').textContent = which === 'wrist' ? 'WRIST CAM' : 'TABLE CAM';
   $('pipQueue').textContent = which === 'wrist' ? 'usbvideo/b81c…' : 'usbvideo/3f9a…';
-  det = null;
+  dets = []; aimZ = null;
 }
-function showDet(world, r, kind, text) { det = { world, r, kind, text }; }
+function showDet(world, r, kind, text) { dets = [{ world, r, kind, text }]; }
+const showDets = (list) => { dets = list; };
 
 /* ------------------------------------------------------------------ UI: steps, log, caption */
 const stepState = PARTS.map(() => 'wait');
 let activeStep = -1, status = 'idle';
+const MKEYS = ['look', 'choose', 'reach', 'align', 'grip', 'hand'];
+const mState = MKEYS.map(() => 'wait');
+function mset(k, s) { mState[MKEYS.indexOf(k)] = s; renderSteps(); }
 function renderSteps() {
+  const moved = scen === 'moved';
+  $('seqH').textContent = t(moved ? 'seqMoved' : 'seq');
+  $('formulas').hidden = moved;
+  if (moved) {
+    const cls = { wait: '', active: 'active', ok: 'ok', warn: 'warn' };
+    $('steps').innerHTML = MKEYS.map((k, i) => { const [a, b] = T[lang].mSteps[k];
+      return `<li class="${mState[i] === 'active' ? 'active' : ''}"><span class="ref">${i + 1}</span><span class="part"><b>${a}</b><span>${b}</span></span><span class="chip ${cls[mState[i]]}">${T[lang].mSt[mState[i]]}</span></li>`; }).join('');
+    $('stepMeta').textContent = `${mState.filter((s) => s === 'ok').length} / ${MKEYS.length}`;
+    return;
+  }
   const chipCls = { wait: '', fetch: 'active', point: 'active', place: 'active', solder: 'active', soldered: 'ok', cold: 'warn', ok: 'ok' };
   $('steps').innerHTML = PARTS.map((p, i) => `<li class="${i === activeStep ? 'active' : ''}"><span class="ref">${p.ref}</span><span class="part"><b>${T[lang].parts[p.ref]}</b><span>${t('cup')} ${p.slot}</span></span><span class="chip ${chipCls[stepState[i]]}">${T[lang].st[stepState[i]]}</span></li>`).join('');
   const done = stepState.filter((s) => s === 'soldered' || s === 'ok' || s === 'cold').length;
@@ -877,12 +970,12 @@ async function doStep(i) {
   setStep(i, 'fetch');
   const miss = $('miss').checked && i === 1 && !missedOnce;
   await tool('fetch_part', { slot: p.slot }, async () => { const ok = await fetchCup(p, miss); return ok ? 'ok · cup released in handover zone' : 'ok · gripper closed (no load sensed)'; });
-  let seen = await tool('look', { camera: 'side' }, () => look(p));
+  let seen = await tool('look', { camera: 'table' }, () => look(p));
   if (!seen.ok) {
     missedOnce = true;
     await speak('I missed the cup. Trying again, slower.');
     await tool('fetch_part', { slot: p.slot, speed: 'slow' }, async () => { await fetchCup(p, false, 1.6); return 'ok · cup released in handover zone'; });
-    seen = await tool('look', { camera: 'side' }, () => look(p));
+    seen = await tool('look', { camera: 'table' }, () => look(p));
   }
   await park(); setPip('side');
   setStep(i, 'place');
@@ -942,6 +1035,127 @@ async function finale() {
   await wait(1.5); caption(null);
 }
 
+/* ------------------------------------------------------------------ scenario: the LED cup was moved */
+// Places a person might put the cup down. Kept only if the arm can grip there straight down and the table camera sees it.
+const SPOT_CANDIDATES = [[-0.12, 0.235], [0.125, 0.245], [-0.21, 0.205], [0.165, 0.055], [-0.215, 0.025], [-0.055, 0.26], [-0.25, 0.12]];
+let SPOTS = [];
+function findSpots() {
+  sideCam.updateMatrixWorld();
+  return SPOT_CANDIDATES.filter(([x, y]) => {
+    const a = arm.solve(V(x, y, ABOVE_Z), DOWN, HOME, HOME, 0.05);
+    const g = arm.solve(V(x, y, GRIP_Z), DOWN, a.q, HOME, 0.12);
+    const p = V(x, y, 0.015).project(sideCam);
+    return a.pe < 0.003 && g.pe < 0.002 && g.ae < 0.25 && Math.abs(p.x) < 0.85 && Math.abs(p.y) < 0.85;
+  });
+}
+const mm = (v) => Math.round(v * 1000);
+const j8n = (v) => ((v - arm.lim[7][0]) / (arm.lim[7][1] - arm.lim[7][0] || 1)).toFixed(2);
+const cupName = (cc) => CUP_LABEL[cc.part.ref] ?? cc.part.ref;
+let movedMissed = false;
+
+// pick(n): hover over the table camera's estimate, let the wrist camera centre the cup, grip, check j8, hand over.
+async function pickCup(c, est, miss) {
+  const tx = c.group.position.x, ty = c.group.position.y, [hx, hy] = LAYOUT.handover;
+  const cupMid = V(tx, ty, LAYOUT.tray.cupH * 0.6), r = LAYOUT.tray.cupR * 1.15;
+  mset('reach', 'active');
+  await gripper(OPEN);
+  await moveArm(ik(V(est.x, est.y, ABOVE_Z), 0.05));
+  mset('reach', 'ok'); mset('align', 'active');
+  setPip('wrist'); aimZ = LAYOUT.tray.cupH * 0.6;
+  const e0 = Math.hypot(tx - est.x, ty - est.y) * 1000;
+  const S = [0, 0.62, 0.9, 1];
+  for (let k = 0; k < 3; k++) {
+    showDet(cupMid, r, 'warn', `cup · ${Math.round(e0 * (1 - S[k]))} mm off`);
+    await wait(0.55);
+    await moveArm(ik(V(est.x + (tx - est.x) * S[k + 1], est.y + (ty - est.y) * S[k + 1], ABOVE_Z), 0.05), 0.7);
+  }
+  showDet(cupMid, r, 'ok', 'centred · <2 mm'); await wait(0.6);
+  mset('align', 'ok'); mset('grip', 'active');
+  await moveArm(ik(V(tx, ty, GRIP_Z)), 1.3);
+  if (miss) {
+    await gripper(1.9, 0.5);
+    dets = []; aimZ = null; mset('grip', 'warn');
+    await gripper(OPEN, 0.35);
+    await moveArm(ik(V(tx, ty, ABOVE_Z), 0.05));
+    return { ok: false, html: `<span class="bad">jaws closed all the way · j8 ${j8n(1.9)} → nothing held</span>` };
+  }
+  await gripper(CUP, 0.5); GB.attach(c.group);
+  dets = []; aimZ = null; mset('grip', 'ok'); mset('hand', 'active');
+  await moveArm(ik(V(tx, ty, ABOVE_Z), 0.05));
+  await goHome();
+  await moveArm(ik(V(hx, hy, ABOVE_Z), 0.05));
+  await moveArm(ik(V(hx, hy, GRIP_Z)), 1.3);
+  await gripper(OPEN, 0.45);
+  bench.attach(c.group); c.group.position.set(hx, hy, 0.0005); c.group.rotation.set(0, 0, 0);
+  await moveArm(ik(V(hx, hy, ABOVE_Z), 0.05));
+  return { ok: true, html: `<span class="ok">gripped ✓ · j8 stopped at ${j8n(CUP)} (holding)</span> · wrist camera corrected ${Math.round(e0)} mm · released in handover zone` };
+}
+
+async function movedScenario() {
+  const c = cups.A3; // D1, the power LED
+  log('act', esc(say({
+    en: 'Station running · normfs :8888 · follower bus 5B61… · table and wrist cameras. Claude Code connected to the third-hand MCP server: look_table, pick, show_footprint, speak.',
+    tr: 'Station çalışıyor · normfs :8888 · follower bus 5B61… · masa ve bilek kameraları. Claude Code third-hand MCP sunucusuna bağlı: look_table, pick, show_footprint, speak.',
+  })));
+  await wait(0.6);
+  const pick = +(qs.get('spot') ?? NaN);
+  const [sx, sy] = SPOTS[Number.isInteger(pick) && SPOTS[pick] ? pick : Math.floor(Math.random() * SPOTS.length)];
+  await act(say({ en: 'You take the LED cup out of the tray and put it down somewhere else on the bench.', tr: 'LED kabını tepsiden alıp masada başka bir yere koyuyorsun.' }));
+  const from = c.group.position.clone(), to = V(sx, sy, 0.0005);
+  await tween(1.6, (k) => { const e = ease(k); c.group.position.lerpVectors(from, to, e); c.group.position.z += Math.sin(Math.PI * e) * 0.05; });
+  await you(say({ en: 'Bring me the LED.', tr: "Bana LED'i getir." }));
+
+  // 1. look: the arm moves out of the table camera's view, the detector numbers everything it finds
+  mset('look', 'active');
+  const found = await tool('look_table', {}, async () => {
+    await moveArm(CLEAR); setPip('table'); await wait(0.4);
+    const list = Object.values(cups).map((cc) => ({ cc, w: V(cc.group.position.x, cc.group.position.y, LAYOUT.tray.cupH * 0.55) }));
+    list.forEach((d) => { d.sx = d.w.clone().project(sideCam).x; });
+    list.sort((a, b) => a.sx - b.sx).forEach((d, i) => { d.n = i + 1; d.below = i % 2 === 1; });
+    const target = list.find((d) => d.cc === c);
+    // pixel -> mm through the calibration is good to a centimetre or two; the wrist camera fixes the rest
+    const ang = Math.random() * Math.PI * 2, off = 0.014 + Math.random() * 0.004;
+    target.est = V(sx + Math.cos(ang) * off, sy + Math.sin(ang) * off, 0);
+    showDets([...list.map((d) => ({ world: d.w, r: LAYOUT.tray.cupR * 1.25, kind: 'ok', text: `#${d.n}`, n: d.n, name: cupName(d.cc), below: d.below })),
+      { world: V(LAYOUT.pcb.center[0], LAYOUT.pcb.center[1], 0.03), r: 0.05, kind: 'dim', text: `#${list.length + 1} board` }]);
+    await wait(1.2);
+    const rows = list.map((d) => { const p = d === target ? target.est : d.cc.group.position; return `#${d.n} cup "${cupName(d.cc)}" (${mm(p.x)}, ${mm(p.y)}) mm`; });
+    rows.push(`#${list.length + 1} board · no hands in view`);
+    return { target, html: rows.join('<br>') };
+  });
+  mset('look', 'ok');
+
+  // 2. choose: Claude reads the numbered picture and the list
+  mset('choose', 'active');
+  const tg = found.target;
+  showDets(dets.map((d) => (d.n === tg.n ? { ...d, kind: 'sel', text: `#${d.n} ${d.name}` } : { ...d, kind: 'dim' })));
+  await speak(say({
+    en: `The LED cup is not in the tray any more. It is #${tg.n}, at about (${mm(tg.est.x)}, ${mm(tg.est.y)}) mm. Picking it up.`,
+    tr: `LED kabı artık tepside değil. #${tg.n} numaralı kap, yaklaşık (${mm(tg.est.x)}, ${mm(tg.est.y)}) mm'de. Alıyorum.`,
+  }));
+  await tool('show_footprint', { ref: 'D1' }, async () => { benchScreen.set({ ref: 'D1', mode: 'place', placed: [...placedRefs], message: SAY.D1 }); await wait(0.6); return { html: 'bench screen: <b>D1</b> lit up' }; });
+  mset('choose', 'ok');
+
+  // 3–5. reach, align, grip, hand over: one tool call, run by the Hub
+  let res = await tool('pick', { id: tg.n }, () => pickCup(c, tg.est, $('miss').checked && !movedMissed));
+  if (!res.ok) {
+    movedMissed = true;
+    await speak(say({ en: 'I missed it: the jaws closed all the way. Aligning again.', tr: 'Kaçırdım, çeneler sonuna kadar kapandı. Yeniden hizalıyorum.' }));
+    res = await tool('pick', { id: tg.n, retry: true }, () => pickCup(c, V(c.group.position.x + 0.006, c.group.position.y - 0.004, 0), false));
+  }
+
+  // 6. verify with the table camera
+  const seen = await tool('look_table', { check: 'handover' }, async () => {
+    await moveArm(CLEAR); setPip('table'); await wait(0.4);
+    const ok = cupAtHandover('A3');
+    showDet(V(LAYOUT.handover[0], LAYOUT.handover[1], 0.015), 0.03, ok ? 'ok' : 'bad', ok ? 'LED cup · 0.96' : 'no cup');
+    await wait(1.0);
+    return { ok, html: ok ? '<span class="ok">"LED" cup in handover zone ✓</span>' : '<span class="bad">handover zone empty</span>' };
+  });
+  mset('hand', seen.ok ? 'ok' : 'warn');
+  await speak(say({ en: 'The LED cup is in front of you. D1 is lit on the bench screen.', tr: 'LED kabı önünde. D1 masa ekranında yanıyor.' }));
+}
+
 /* ------------------------------------------------------------------ run / reset */
 let runId = 0;
 function resetScene() {
@@ -951,20 +1165,23 @@ function resetScene() {
   for (const k of Object.keys(joints)) { joints[k].removeFromParent(); delete joints[k]; }
   resetCups();
   setIron(IRON_REST.pos, qFromDir(IRON_REST.dir)); iron.userData.tipMat.emissiveIntensity = 0; smokeOn = false;
-  ring.material.opacity = 0; ringPulse = 0; ledOn = false; missedOnce = false; det = null; adapter.visible = false;
+  ring.material.opacity = 0; ringPulse = 0; ledOn = false; missedOnce = false; dets = []; aimZ = null; adapter.visible = false;
   placedRefs = []; benchScreen.set({ ref: null, mode: 'idle', placed: [], flags: [] });
-  stepState.fill('wait'); activeStep = -1; renderSteps(); setPip('side'); caption(null);
+  stepState.fill('wait'); mState.fill('wait'); movedMissed = false; activeStep = -1; renderSteps(); setPip('table'); caption(null);
   $('log').innerHTML = ''; simT = 0;
 }
 async function run() {
   const my = ++runId;
   resetScene(); paused = false; $('pause').textContent = t('pause'); setPill('running');
-  log('act', esc('Station running · normfs :8888 · follower bus 5B61… · 2 cameras. Claude Code connected to the third-hand MCP server. Fresh SOL-MIO v1.3 on the fixture, U1 and J2 already fitted.'));
   try {
-    await wait(0.6);
-    for (let i = 0; i < PARTS.length; i++) await doStep(i);
-    await inspectPhase();
-    await finale();
+    if (scen === 'moved') await movedScenario();
+    else {
+      log('act', esc('Station running · normfs :8888 · follower bus 5B61… · 2 cameras. Claude Code connected to the third-hand MCP server. Fresh SOL-MIO v1.3 on the fixture, U1 and J2 already fitted.'));
+      await wait(0.6);
+      for (let i = 0; i < PARTS.length; i++) await doStep(i);
+      await inspectPhase();
+      await finale();
+    }
     if (my === runId) setPill('done');
   } catch (e) {
     if (!(e instanceof Abort)) { console.error(e); log('res', `<span class="bad">${esc(e.message)}</span>`); }
@@ -1003,8 +1220,9 @@ function resize() {
   const far = W / H < 1 ? 1 + (1 - W / H) * 1.6 : 1;
   camera.position.copy(CAM_HOME.target).add(CAM_HOME.pos.clone().sub(CAM_HOME.target).multiplyScalar(far));
   camera.updateProjectionMatrix();
-  pipW = Math.round(Math.min(W * 0.36, 300)); pipH = Math.round(pipW * 0.75);
+  pipW = Math.round(Math.min(W * 0.38, 340)); pipH = Math.round(pipW * 0.75);
   Object.assign($('pip').style, { width: pipW + 'px', height: pipH + 'px' });
+  $('pip').classList.toggle('small', pipW < 260);
 }
 new ResizeObserver(() => { const keep = camera.position.clone(); resize(); if (started) camera.position.copy(keep); }).observe(stage);
 let started = false;
@@ -1031,19 +1249,31 @@ function frame(now) {
   pipCam.aspect = pipW / pipH; pipCam.updateProjectionMatrix();
   renderer.setScissorTest(true); renderer.setScissor(13, 13, pipW, pipH); renderer.setViewport(13, 13, pipW, pipH);
   renderer.render(scene, pipCam); renderer.setScissorTest(false);
-  const box = $('det');
-  if (det) {
-    pipCam.updateMatrixWorld();
-    const c = det.world.clone().project(pipCam);
-    const right = V(1, 0, 0).applyQuaternion(pipCam.getWorldQuaternion(new THREE.Quaternion())).multiplyScalar(det.r);
-    const e = det.world.clone().add(right).project(pipCam);
-    const rr = Math.max(10, Math.abs(e.x - c.x) * pipW / 2);
+  // detections drawn over the camera picture (what the Hub hands Claude)
+  pipCam.updateMatrixWorld();
+  const camQ = pipCam.getWorldQuaternion(new THREE.Quaternion());
+  const detBox = $('dets');
+  while (detBox.children.length < dets.length) { const d = document.createElement('div'); d.innerHTML = '<span></span>'; detBox.appendChild(d); }
+  [...detBox.children].forEach((box, i) => {
+    const d = dets[i];
+    if (!d) { box.hidden = true; return; }
+    const c = d.world.clone().project(pipCam);
+    const e = d.world.clone().add(V(1, 0, 0).applyQuaternion(camQ).multiplyScalar(d.r)).project(pipCam);
+    const rr = Math.max(9, Math.abs(e.x - c.x) * pipW / 2);
     const cx = (c.x + 1) / 2 * pipW, cy = (1 - c.y) / 2 * pipH;
     box.hidden = !(c.z < 1 && cx > -rr && cx < pipW + rr);
     Object.assign(box.style, { left: (cx - rr) + 'px', top: (cy - rr) + 'px', width: rr * 2 + 'px', height: rr * 2 + 'px' });
-    box.className = 'det ' + (det.kind === 'ok' ? '' : det.kind);
-    $('detTxt').textContent = det.text;
-  } else box.hidden = true;
+    box.className = 'det ' + (d.kind === 'ok' ? '' : d.kind) + (d.below ? ' below' : '');
+    box.firstChild.textContent = d.text;
+  });
+  const cross = $('cross');
+  if (aimZ !== null && pipCam === wristCam) {
+    // the point the jaws close on: the tool axis at cup-grip height
+    const { tip, axis } = arm.fk(cur);
+    const aim = tip.clone().addScaledVector(axis, (tip.z - aimZ) / Math.max(0.3, -axis.z)).project(pipCam);
+    cross.hidden = false;
+    Object.assign(cross.style, { left: ((aim.x + 1) / 2 * pipW) + 'px', top: ((1 - aim.y) / 2 * pipH) + 'px' });
+  } else cross.hidden = true;
   teleAcc += dt; if (teleAcc > 0.1) { teleAcc = 0; updateTele(); }
   requestAnimationFrame(frame);
 }
@@ -1062,6 +1292,11 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').match
 $('viewSeg').onclick = (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); };
 $('speedSeg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; speed = +b.dataset.s; $('speedSeg').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b)); };
 $('poses').onchange = (e) => { poseMarkers.visible = e.target.checked; };
+$('scenSeg').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b || b.dataset.sc === scen) return;
+  scen = b.dataset.sc; runId++; resetScene(); applyLang(); paused = false; $('pause').textContent = t('pause'); setPill('idle');
+  setTimeout(() => { if (status === 'idle') run(); }, 300);
+};
 $('lang-en').onclick = () => { lang = 'en'; applyLang(); };
 $('lang-tr').onclick = () => { lang = 'tr'; applyLang(); };
 window.addEventListener('keydown', (e) => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('pause').click(); } });
@@ -1069,10 +1304,15 @@ window.addEventListener('keydown', (e) => { if (e.code === 'Space' && e.target =
 try { const saved = localStorage.getItem('thirdhand-lang'); if (saved === 'tr' || saved === 'en') lang = saved; } catch (e) { /* storage unavailable */ }
 const qs = new URLSearchParams(location.search);
 if (qs.get('speed')) speed = +qs.get('speed');
+if (qs.get('scenario') === 'moved') scen = 'moved';
 cur.splice(0, 8, ...HOME);
 $('screenWrap').appendChild(screenCanvas);
 bench.updateMatrixWorld(true);
 buildPoseMarkers();
+SPOTS = findSpots();
+console.info('[sim] reachable, visible cup spots:', JSON.stringify(SPOTS), '· clear-view tip:', arm.fk(CLEAR).tip.toArray().map((v) => v.toFixed(3)).join(', '));
+arm.setQ(cur); robot.root.updateMatrixWorld(true);
+if (!SPOTS.length) SPOTS = [SPOT_CANDIDATES[0]];
 applyLang();
 resize(); started = true;
 $('loading').hidden = true;

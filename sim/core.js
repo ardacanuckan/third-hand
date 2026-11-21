@@ -15,7 +15,8 @@ export const LAYOUT = {
   },
   handover: [0.135, 0.15],
   ironStand: [0.19, 0.37],
-  sideCam: { pos: [0.36, -0.02, 0.33], look: [-0.01, 0.15, 0.02] },
+  // the table camera: overhead on a boom, looking almost straight down, so the arm never stands between it and the bench
+  sideCam: { pos: [-0.02, 0.27, 0.62], look: [-0.02, 0.14, 0.0], pole: [0.3, 0.27] },
 };
 
 // The power stage of a fresh SOL-MIO v1.3 board: 12 V jack J2 → D2 → VIN (C4, C13) → 7805 → 5 V → R1 → power LED D1.
